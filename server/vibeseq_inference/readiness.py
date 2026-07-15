@@ -11,8 +11,18 @@ from .devices import (
     stable_audio_runtime_routes,
 )
 from .model_manifest import MODEL_MANIFEST, ModelArtifact
-from .stable_audio_mlx import mlx_code_cached
-from .stable_audio_tflite import tflite_code_cached
+
+
+def mlx_code_cached() -> bool:
+    from .stable_audio_mlx import mlx_code_cached as check
+
+    return check()
+
+
+def tflite_code_cached() -> bool:
+    from .stable_audio_tflite import tflite_code_cached as check
+
+    return check()
 
 
 def module_installed(module: str) -> bool:

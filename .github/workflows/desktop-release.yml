@@ -1,0 +1,85 @@
+name: Desktop release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64
+            os: windows-latest
+            artifact: vibeseq-windows-x64
+          - label: macOS arm64
+            os: macos-15
+            artifact: vibeseq-macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.1"
+          enable-cache: true
+          cache-dependency-glob: server/uv.lock
+      - run: npm ci
+      - run: npm run check
+      - run: npm run desktop:package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish prerelease
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Create checksums
+        working-directory: release-assets
+        run: sha256sum * > SHA256SUMS.txt
+      - name: Write release scope
+        run: |
+          cat > "${RUNNER_TEMP}/release-notes.md" <<'EOF'
+          ## Desktop shell validation prerelease
+
+          This unsigned prerelease is for clean-machine validation of the VibeSeq desktop shell, local persistence, arrangement editing, playback, and export.
+
+          It embeds the Studio and lightweight local inference sidecar, so Node.js, Python, and `uv` are not required. Stable Audio 3 Medium and MuScriptor Medium weights and heavyweight model runtimes are intentionally not included; the bundled demo providers are labelled as fixtures. Real-model validation remains a separate model-pack milestone.
+
+          Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. Verify the downloaded asset with `SHA256SUMS.txt` before running it.
+          EOF
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release-assets/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "VibeSeq ${GITHUB_REF_NAME}" \
+            --notes-file "${RUNNER_TEMP}/release-notes.md" \
+            --prerelease

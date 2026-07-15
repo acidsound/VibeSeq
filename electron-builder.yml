@@ -1,0 +1,35 @@
+appId: ai.vibeseq.studio
+productName: VibeSeq
+asar: true
+npmRebuild: false
+compression: maximum
+directories:
+  output: release
+files:
+  - desktop/main.cjs
+extraResources:
+  - from: dist
+    to: studio
+    filter:
+      - "**/*"
+  - from: desktop-out/sidecar/vibeseq-inference
+    to: server
+    filter:
+      - "**/*"
+mac:
+  category: public.app-category.music
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+  artifactName: "${productName}-${version}-macOS-${arch}.${ext}"
+  identity: null
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  artifactName: "${productName}-${version}-Windows-${arch}.${ext}"

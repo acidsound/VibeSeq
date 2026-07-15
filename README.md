@@ -159,6 +159,19 @@ Review the upstream licenses before production or commercial use:
 - Stable Audio 3: <https://github.com/Stability-AI/stable-audio-3>
 - MuScriptor: <https://github.com/muscriptor/muscriptor>
 
+## Desktop prerelease packages
+
+Release tags matching `v*` build an unsigned Windows x64 portable executable
+and unsigned Apple Silicon macOS packages through GitHub Actions. These packages
+embed the Studio and lightweight local inference sidecar, so the target machine
+does not need Node.js, Python, `uv`, or a separate web server.
+
+The first desktop prerelease is a shell and workflow validation target. Stable
+Audio 3 Medium and MuScriptor Medium weights and heavyweight model runtimes are
+not embedded; those remain a separate model-pack boundary. See
+`docs/product/desktop-release.md` for artifact names, security boundaries,
+unsigned-build warnings, and the clean-Windows acceptance checklist.
+
 ## Colab T4 target
 
 Colab runs the complete built Studio and inference API from one origin; it is not

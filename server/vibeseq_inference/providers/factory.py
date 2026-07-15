@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from ..config import Settings
 from .base import GenerationProvider, TranscriptionProvider
-from .muscriptor import MuScriptorProvider
 from .procedural import ProceduralDemoProvider
 from .signal import SignalDemoProvider
-from .stable_audio import StableAudio3Provider
 
 
 def generation_provider(name: str, settings: Settings) -> GenerationProvider:
     if name == "procedural-demo":
         return ProceduralDemoProvider()
     if name == "stable-audio-3":
+        from .stable_audio import StableAudio3Provider
+
         return StableAudio3Provider(
             settings.stable_audio_model,
             target=settings.target,
@@ -25,6 +25,8 @@ def transcription_provider(name: str, settings: Settings) -> TranscriptionProvid
     if name == "signal-demo":
         return SignalDemoProvider()
     if name == "muscriptor":
+        from .muscriptor import MuScriptorProvider
+
         return MuScriptorProvider(
             settings.muscriptor_model,
             force_cpu=settings.force_cpu,
