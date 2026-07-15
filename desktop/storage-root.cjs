@@ -16,7 +16,9 @@ const STORAGE_DIRECTORIES = Object.freeze([
 
 const expandHome = (value, homeDirectory) => {
   if (value === '~') return homeDirectory
-  if (value.startsWith(`~${path.sep}`)) return path.join(homeDirectory, value.slice(2))
+  if (value.startsWith('~/') || value.startsWith('~\\')) {
+    return path.join(homeDirectory, value.slice(2))
+  }
   return value
 }
 

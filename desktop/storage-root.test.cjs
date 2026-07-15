@@ -34,13 +34,14 @@ test('macOS storage defaults to VibeSeq Data in the home directory', () => {
 })
 
 test('VIBESEQ_HOME overrides platform defaults and expands home', () => {
+  const homeDirectory = path.join(path.parse(process.cwd()).root, 'Users', 'artist')
   const root = resolveStorageRoot({
     platform: 'darwin',
     env: { VIBESEQ_HOME: '~/Music/VibeSeq' },
-    homeDirectory: '/Users/artist',
+    homeDirectory,
     isPackaged: true,
   })
-  assert.equal(root, path.join('/Users/artist', 'Music', 'VibeSeq'))
+  assert.equal(root, path.join(homeDirectory, 'Music', 'VibeSeq'))
 })
 
 test('storage root creates every durable data directory', () => {
@@ -61,14 +62,22 @@ test('storage root creates every durable data directory', () => {
 })
 
 test('sidecar environment can use a read-only bundled model cache', () => {
-  const environment = sidecarStorageEnvironment('/data/VibeSeq Data', {
-    bundledModelHub: '/Applications/VibeSeq.app/Contents/Resources/models/huggingface/hub',
+  const root = path.join(path.parse(process.cwd()).root, 'data', 'VibeSeq Data')
+  const bundledModelHub = path.join(
+    path.parse(process.cwd()).root,
+    'Applications',
+    'VibeSeq.app',
+    'Contents',
+    'Resources',
+    'models',
+    'huggingface',
+    'hub',
+  )
+  const environment = sidecarStorageEnvironment(root, {
+    bundledModelHub,
   })
 
-  assert.equal(
-    environment.HUGGINGFACE_HUB_CACHE,
-    '/Applications/VibeSeq.app/Contents/Resources/models/huggingface/hub',
-  )
+  assert.equal(environment.HUGGINGFACE_HUB_CACHE, bundledModelHub)
   assert.equal(environment.HF_HUB_OFFLINE, '1')
-  assert.equal(environment.HF_HOME, '/data/VibeSeq Data/models/huggingface')
+  assert.equal(environment.HF_HOME, path.join(root, 'models', 'huggingface'))
 })
