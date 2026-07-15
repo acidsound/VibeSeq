@@ -1,0 +1,59 @@
+{
+  "verificationDate": "2026-07-15",
+  "scope": "Fresh-process real Medium provider execution after all source and model artifacts were installed",
+  "networkPolicy": {
+    "processSandbox": "sandbox-exec deny network* inherited by provider workers",
+    "huggingFaceOffline": true,
+    "transformersOffline": true,
+    "result": "both providers completed with network access denied"
+  },
+  "generation": {
+    "provider": "stable-audio-3",
+    "model": "medium",
+    "modelId": "stabilityai/stable-audio-3-optimized",
+    "modelRevision": "c2949a435de2392fe49c5914c52bc174cfc05a9b",
+    "codeRevision": "b32763cf3b71c160f10a0daa4fa0e0d471b5772e",
+    "device": "metal",
+    "runtime": "mlx",
+    "route": "apple-mlx",
+    "requestedDurationSeconds": 1,
+    "elapsedSeconds": 8.889789875014685,
+    "sampleRate": 44100,
+    "sourcePeak": 0.6074146032333374,
+    "outputPeak": 0.6074146032333374,
+    "artifact": {
+      "path": "artifacts/qa/2026-07-15-real-medium/stable-audio-3-medium-offline-network-denied.wav",
+      "sha256": "0cc1c4cbb9ea18d1a66b286523911964d4eb52761ab9810d331fdcb6cf1d8516",
+      "channels": 2,
+      "frames": 44100,
+      "bitDepth": 16,
+      "nonSilentSamples": 74053,
+      "fullScaleSamples": 0
+    }
+  },
+  "transcription": {
+    "provider": "muscriptor",
+    "model": "medium",
+    "modelId": "MuScriptor/muscriptor-medium",
+    "modelRevision": "f32236969308476e01fd3aae67357de5feb05a2d",
+    "codeRevision": "6c1460cc75e5f120948de7656da05b2c489e8715",
+    "device": "mps",
+    "runtime": "pytorch-mps",
+    "route": "apple-mps",
+    "inputDurationSeconds": 30,
+    "elapsedSeconds": 15.496592417010106,
+    "noteCount": 16,
+    "artifact": {
+      "path": "artifacts/qa/2026-07-15-real-medium/muscriptor-medium-mps-offline-network-denied.mid",
+      "sha256": "c25da3e7b2f6467759bef7bbec1e0079ebe717f67d8da9d5842dfd07d0d1e3ff",
+      "format": 1,
+      "tracks": 3,
+      "ppq": 480
+    }
+  },
+  "limitations": [
+    "This proves provider execution without network after installation; browser offline editing and export are covered separately by local persistence and browser tests.",
+    "Each latency is a single run, not a p95 distribution.",
+    "The deterministic input has no aligned ground-truth MIDI and is not an accuracy score."
+  ]
+}

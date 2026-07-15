@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-15T11:17:39.425Z",
+  "evidenceScope": "Node core benchmark; not browser FPS, physical-device, audio-underrun, or UI-responsiveness proof.",
+  "runtime": {
+    "node": "v24.18.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M2",
+    "logicalCpuCount": 8,
+    "totalMemoryBytes": 17179869184
+  },
+  "target": {
+    "durationSeconds": 600,
+    "bpm": 120,
+    "durationBeats": 1200,
+    "trackCount": 24,
+    "clipCount": 250,
+    "midiNoteCount": 50000,
+    "automationTrackCount": 8,
+    "importedSampleRates": [
+      44100,
+      48000
+    ]
+  },
+  "realized": {
+    "durationSeconds": 600,
+    "durationBeats": 1200,
+    "trackCount": 24,
+    "clipCount": 250,
+    "midiNoteCount": 50000,
+    "automationTrackCount": 0,
+    "importedSampleRates": [
+      44100,
+      48000
+    ],
+    "unsupportedFeatures": [
+      "Track automation is not represented in the current Project schema."
+    ]
+  },
+  "checks": {
+    "supportedReferenceShape": {
+      "status": "PARTIAL",
+      "reasons": [
+        "Track automation is not represented in the current Project schema."
+      ]
+    },
+    "serializationRoundTrip": {
+      "status": "PASS",
+      "exactBytes": true,
+      "serializedBytes": 7540615,
+      "sha256": "39807839714fffee048d0dba0801a9261b4f912c44ec99f805d5046e861f7e3d"
+    },
+    "coreReloadEndurance": {
+      "status": "PASS",
+      "cycles": 100,
+      "exactCanonicalBytes": true,
+      "exactSourceHashes": true,
+      "finalSha256": "39807839714fffee048d0dba0801a9261b4f912c44ec99f805d5046e861f7e3d",
+      "rssGrowthRatioAfterGcOpportunity": 0.9529007567191441,
+      "heapGrowthRatioAfterGcOpportunity": -0.022118339137942623,
+      "gcExposed": true,
+      "memoryAssessment": "DIAGNOSTIC_ONLY",
+      "note": "Core codec canonical-state endurance only. Forced Node GC makes heap growth diagnostic; retained process RSS is not browser live-object growth. This does not replace 100 real IndexedDB/browser save-close-open cycles."
+    },
+    "playbackPlan": {
+      "status": "PASS",
+      "eventCount": 50120,
+      "eventCounts": {
+        "audio": 120,
+        "midi": 50000
+      },
+      "note": "The complete deterministic plan remains materialized as data; WebAudio node creation is measured separately below."
+    },
+    "boundedWebAudioSchedule": {
+      "status": "PASS",
+      "scheduleAheadSeconds": 0.2,
+      "scheduledOscillatorCount": 240,
+      "scheduledBufferSourceCount": 12,
+      "totalPlanEventCount": 50120,
+      "note": "Fake AudioContext proves bounded initial node creation; real browser node lifetime and underrun behavior remain unverified."
+    },
+    "midiExport": {
+      "status": "PASS",
+      "byteLength": 400544,
+      "sha256": "6eeefa678b31636964da2d33943014f29bd529c018c1446d41bb82697d68d8f6",
+      "exactRepeatedExport": true,
+      "importedTrackCount": 12,
+      "importedNoteCount": 50000
+    },
+    "wavExport": {
+      "status": "PASS",
+      "byteLength": 158760044,
+      "sha256": "011263724021d2d5d562005cac07cad4aeb55d5c0df4f7b31c99176bc164c2a8",
+      "sampleRate": 44100,
+      "channelCount": 2,
+      "bitDepth": 24,
+      "durationSeconds": 600,
+      "maxTimerStallMs": 5409.689582999999,
+      "note": "A large timer stall means this synchronous core path cannot establish the UI-remains-responsive export requirement."
+    },
+    "productionCapacityGate": {
+      "status": "PARTIAL",
+      "missing": [
+        "automation on eight tracks",
+        "warm IndexedDB-to-interactive browser open timing",
+        "desktop/mobile timeline FPS and gesture stalls",
+        "60-minute playback/edit underrun soak",
+        "50 generate/cancel and 50 extract/commit/undo memory cycles",
+        "100 browser save/reload cycles with source-hash comparison"
+      ]
+    }
+  },
+  "measurementsMs": {
+    "fixtureBuild": {
+      "elapsedMs": 46.939749999999975,
+      "rssBeforeBytes": 75022336,
+      "rssAfterBytes": 97435648,
+      "heapUsedBeforeBytes": 14040096,
+      "heapUsedAfterBytes": 26553192,
+      "arrayBuffersBeforeBytes": 149981,
+      "arrayBuffersAfterBytes": 3508536
+    },
+    "checkpointBuild": {
+      "elapsedMs": 64.00620899999998,
+      "rssBeforeBytes": 97435648,
+      "rssAfterBytes": 138903552,
+      "heapUsedBeforeBytes": 26559384,
+      "heapUsedAfterBytes": 52422936,
+      "arrayBuffersBeforeBytes": 3508536,
+      "arrayBuffersAfterBytes": 4627423
+    },
+    "serialize": {
+      "elapsedMs": 88.313083,
+      "rssBeforeBytes": 138903552,
+      "rssAfterBytes": 244924416,
+      "heapUsedBeforeBytes": 52423776,
+      "heapUsedAfterBytes": 116702808,
+      "arrayBuffersBeforeBytes": 4627423,
+      "arrayBuffersAfterBytes": 5748311
+    },
+    "deserialize": {
+      "elapsedMs": 106.286833,
+      "rssBeforeBytes": 244924416,
+      "rssAfterBytes": 340541440,
+      "heapUsedBeforeBytes": 116703648,
+      "heapUsedAfterBytes": 138593304,
+      "arrayBuffersBeforeBytes": 5748311,
+      "arrayBuffersAfterBytes": 8758131
+    },
+    "reserialize": {
+      "elapsedMs": 85.777042,
+      "rssBeforeBytes": 340541440,
+      "rssAfterBytes": 380157952,
+      "heapUsedBeforeBytes": 138594144,
+      "heapUsedAfterBytes": 171466712,
+      "arrayBuffersBeforeBytes": 8758131,
+      "arrayBuffersAfterBytes": 9110975
+    },
+    "coreReloadCycles100": {
+      "elapsedMs": 17222.754583,
+      "rssBeforeBytes": 376733696,
+      "rssAfterBytes": 742998016,
+      "heapUsedBeforeBytes": 52132672,
+      "heapUsedAfterBytes": 67067120,
+      "arrayBuffersBeforeBytes": 5748311,
+      "arrayBuffersAfterBytes": 6869199
+    },
+    "playbackPlan": {
+      "elapsedMs": 72.38866699999926,
+      "rssBeforeBytes": 735723520,
+      "rssAfterBytes": 740065280,
+      "heapUsedBeforeBytes": 50976216,
+      "heapUsedAfterBytes": 98097688,
+      "arrayBuffersBeforeBytes": 5748311,
+      "arrayBuffersAfterBytes": 5748311
+    },
+    "boundedWebAudioSchedule": {
+      "elapsedMs": 47.49716699999772,
+      "rssBeforeBytes": 740065280,
+      "rssAfterBytes": 741785600,
+      "heapUsedBeforeBytes": 98115032,
+      "heapUsedAfterBytes": 181041016,
+      "arrayBuffersBeforeBytes": 5750359,
+      "arrayBuffersAfterBytes": 5750359
+    },
+    "midiExportFirst": {
+      "elapsedMs": 40.58666699999958,
+      "rssBeforeBytes": 741785600,
+      "rssAfterBytes": 775290880,
+      "heapUsedBeforeBytes": 181068000,
+      "heapUsedAfterBytes": 226562400,
+      "arrayBuffersBeforeBytes": 5750359,
+      "arrayBuffersAfterBytes": 6150930
+    },
+    "midiExportSecond": {
+      "elapsedMs": 23.415750000000116,
+      "rssBeforeBytes": 775290880,
+      "rssAfterBytes": 778190848,
+      "heapUsedBeforeBytes": 226563728,
+      "heapUsedAfterBytes": 226875040,
+      "arrayBuffersBeforeBytes": 6150930,
+      "arrayBuffersAfterBytes": 6551461
+    },
+    "midiImport": {
+      "elapsedMs": 24.4777920000015,
+      "rssBeforeBytes": 778190848,
+      "rssAfterBytes": 759595008,
+      "heapUsedBeforeBytes": 226875896,
+      "heapUsedAfterBytes": 190663584,
+      "arrayBuffersBeforeBytes": 6551461,
+      "arrayBuffersAfterBytes": 6551447
+    },
+    "wavExport": {
+      "elapsedMs": 5409.422792000001,
+      "rssBeforeBytes": 760430592,
+      "rssAfterBytes": 925794304,
+      "heapUsedBeforeBytes": 190601200,
+      "heapUsedAfterBytes": 122136848,
+      "arrayBuffersBeforeBytes": 7352580,
+      "arrayBuffersAfterBytes": 376991491
+    }
+  }
+}

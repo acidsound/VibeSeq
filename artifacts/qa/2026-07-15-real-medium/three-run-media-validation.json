@@ -1,0 +1,80 @@
+[
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-01-attempt-01-full-mix-24bit.wav",
+    "kind": "wav",
+    "valid": true,
+    "bytes": 2083772,
+    "sha256": "e31246d6db20f862ab9c5091283e9a59fc5a2ddad9b53c356ee9bd8959687b2a",
+    "audioFormat": "PCM",
+    "channels": 2,
+    "sampleRate": 44100,
+    "bitDepth": 24,
+    "frames": 347288,
+    "durationSeconds": 7.8750113378684805,
+    "peak": 0.5552013582231233,
+    "nonSilentSamples": 683534,
+    "fullScaleSamples": 0
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-02-attempt-01-full-mix-24bit.wav",
+    "kind": "wav",
+    "valid": true,
+    "bytes": 2083772,
+    "sha256": "603b1e009c36ab2a343e34ad91de485b0cee483dedc9f78bc821374b2a26da3c",
+    "audioFormat": "PCM",
+    "channels": 2,
+    "sampleRate": 44100,
+    "bitDepth": 24,
+    "frames": 347288,
+    "durationSeconds": 7.8750113378684805,
+    "peak": 0.5322014727832642,
+    "nonSilentSamples": 683529,
+    "fullScaleSamples": 0
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-03-attempt-01-full-mix-24bit.wav",
+    "kind": "wav",
+    "valid": true,
+    "bytes": 2083772,
+    "sha256": "8ab2f7514c15e857ff5b9ff771f1a4817196a4f61f1010507621a14b5b244a3f",
+    "audioFormat": "PCM",
+    "channels": 2,
+    "sampleRate": 44100,
+    "bitDepth": 24,
+    "frames": 347288,
+    "durationSeconds": 7.8750113378684805,
+    "peak": 0.5222183465957642,
+    "nonSilentSamples": 681655,
+    "fullScaleSamples": 0
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-01-attempt-01-arrangement.mid",
+    "kind": "midi",
+    "valid": true,
+    "bytes": 357,
+    "sha256": "390b8d08bbf40eece9df3c89664da8e4122a8335d93b91a36bce1333698d1dd5",
+    "format": 1,
+    "tracks": 2,
+    "ppq": 480
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-02-attempt-01-arrangement.mid",
+    "kind": "midi",
+    "valid": true,
+    "bytes": 249,
+    "sha256": "e617b8fc8f35bd1f5a075f0ac66df8067067c1ec2db47fa2d8b7c8aade7d6b38",
+    "format": 1,
+    "tracks": 2,
+    "ppq": 480
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-03-attempt-01-arrangement.mid",
+    "kind": "midi",
+    "valid": true,
+    "bytes": 310,
+    "sha256": "6ad5e794d16b4724b7692c15a19531ccd422269b49ad6138a8308ca14752e4db",
+    "format": 1,
+    "tracks": 2,
+    "ppq": 480
+  }
+]

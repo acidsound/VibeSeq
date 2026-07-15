@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vibeseq-inference"
+version = "0.1.0"
+description = "Local-first inference service for VibeSeq"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "numpy>=2.2.6,<3",
+  "platformdirs>=4.3,<5",
+  "python-multipart>=0.0.20,<1",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[project.optional-dependencies]
+stable-audio = [
+  "stable-audio-3 @ git+https://github.com/Stability-AI/stable-audio-3.git@b32763cf3b71c160f10a0daa4fa0e0d471b5772e",
+  "ai-edge-litert==2.1.6",
+  "mlx>=0.30,<1; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sentencepiece>=0.2,<1; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+muscriptor = [
+  "muscriptor @ git+https://github.com/muscriptor/muscriptor.git@6c1460cc75e5f120948de7656da05b2c489e8715",
+]
+models = [
+  "stable-audio-3 @ git+https://github.com/Stability-AI/stable-audio-3.git@b32763cf3b71c160f10a0daa4fa0e0d471b5772e",
+  "ai-edge-litert==2.1.6",
+  "muscriptor @ git+https://github.com/muscriptor/muscriptor.git@6c1460cc75e5f120948de7656da05b2c489e8715",
+  "mlx>=0.30,<1; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sentencepiece>=0.2,<1; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.4,<9",
+  "ruff>=0.14,<1",
+]
+
+[project.scripts]
+vibeseq-inference = "vibeseq_inference.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vibeseq_inference"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.uv]
+# Stable Audio 3 requires NumPy 2, while MuScriptor currently pins NumPy 1 only
+# on Intel macOS. VibeSeq's supported model targets are Apple Silicon desktop,
+# Linux CUDA/CPU (including Colab T4), and Windows CUDA/CPU.
+environments = [
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sys_platform == 'linux'",
+  "sys_platform == 'win32'",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

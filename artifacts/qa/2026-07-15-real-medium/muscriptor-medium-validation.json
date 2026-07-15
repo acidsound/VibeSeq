@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-07-15T08:24:59Z",
+  "status": "verified",
+  "source": {
+    "path": "artifacts/qa/2026-07-15-real-medium/stable-audio-3-medium-mlx-seed-424242.wav",
+    "sha256": "cfe0a8888f9b526ef7707f65f670ff3e3cab054805674fbbfbaed26624d697b8",
+    "channels": 2,
+    "sampleRate": 44100,
+    "frames": 176400,
+    "durationSeconds": 4.0
+  },
+  "model": {
+    "provider": "muscriptor",
+    "variant": "medium",
+    "modelId": "MuScriptor/muscriptor-medium",
+    "modelRevision": "f32236969308476e01fd3aae67357de5feb05a2d",
+    "codeRepository": "https://github.com/muscriptor/muscriptor",
+    "codeRevision": "6c1460cc75e5f120948de7656da05b2c489e8715",
+    "installedPackageVersion": "0.2.2a1",
+    "installedCodeRevisionVerifiedFromDirectUrlMetadata": true,
+    "config": {
+      "variant": "medium",
+      "dim": 1024,
+      "numHeads": 16,
+      "numLayers": 24,
+      "card": 1395
+    },
+    "files": {
+      "config.json": {
+        "bytes": 126,
+        "sha256": "43e13a70fc9ae0af36b7447c06f3eac2282daeb69d79c1ff840ede7fdaa26a3b"
+      },
+      "model.safetensors": {
+        "bytes": 1228144472,
+        "sha256": "ac80adbdf85d87231735fd948af7013441c0afced316c4e9067fd5d8a7fb97ec"
+      }
+    },
+    "license": "CC BY-NC 4.0",
+    "smallFallbackUsed": false
+  },
+  "runtime": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.8",
+    "torch": "2.7.1",
+    "device": "mps",
+    "runtime": "pytorch-mps",
+    "route": "apple-mps",
+    "readiness": {
+      "ready": true,
+      "packageInstalled": true,
+      "weightsCached": true,
+      "accessGranted": true,
+      "accessEvidence": "exact-revision-cache",
+      "runtimeCompatible": true,
+      "adapterImplemented": true,
+      "executionEnabled": true,
+      "missingFiles": []
+    }
+  },
+  "runs": {
+    "directProvider": {
+      "output": "artifacts/qa/2026-07-15-real-medium/muscriptor-medium-seed-424242.mid",
+      "completed": true,
+      "notesFromProvider": 18,
+      "providerElapsedSeconds": 14.981439166003838,
+      "wallSeconds": 15.5,
+      "maximumResidentSetBytes": 448970752,
+      "peakMemoryFootprintBytes": 3679028328,
+      "swaps": 0
+    },
+    "httpApi": {
+      "output": "artifacts/qa/2026-07-15-real-medium/muscriptor-medium-api-seed-424242.mid",
+      "acceptedStatus": 202,
+      "finalStatus": "completed",
+      "finalProgress": 1.0,
+      "notesFromApi": 18,
+      "assetContentType": "audio/midi",
+      "requestToAssetElapsedSeconds": 10.494459124980494,
+      "wallSeconds": 11.08,
+      "maximumResidentSetBytes": 451575808,
+      "peakMemoryFootprintBytes": 3682845848,
+      "swaps": 0
+    },
+    "determinism": {
+      "freshProcessOutputsByteIdentical": true,
+      "directProviderSha256": "807448eb77bde6ef52703b9b8527bf20cea7d8a34bfbaa95db14e11df5a09561",
+      "httpApiSha256": "807448eb77bde6ef52703b9b8527bf20cea7d8a34bfbaa95db14e11df5a09561"
+    }
+  },
+  "midiValidation": {
+    "path": "artifacts/qa/2026-07-15-real-medium/muscriptor-medium-api-seed-424242.mid",
+    "bytes": 188,
+    "sha256": "807448eb77bde6ef52703b9b8527bf20cea7d8a34bfbaa95db14e11df5a09561",
+    "headerAscii": "MThd",
+    "headerLength": 6,
+    "format": 1,
+    "declaredTracks": 2,
+    "parsedTracks": 2,
+    "ticksPerBeat": 480,
+    "noteCount": 18,
+    "pitchMin": 38,
+    "pitchMax": 71,
+    "velocityMin": 100,
+    "velocityMax": 100,
+    "firstNoteSeconds": 1.7104166666666667,
+    "lastNoteEndSeconds": 3.060416666666667,
+    "midiLengthSeconds": 3.060416666666667,
+    "danglingNoteOns": 0,
+    "programChanges": [
+      {
+        "track": 1,
+        "tick": 0,
+        "channel": 0,
+        "program": 0
+      }
+    ]
+  },
+  "tests": {
+    "command": ".venv/bin/pytest tests/test_adapters.py tests/test_readiness.py tests/test_config.py",
+    "workingDirectory": "server",
+    "passed": 15,
+    "failed": 0,
+    "elapsedSeconds": 0.9
+  },
+  "limitations": [
+    "No ground-truth MIDI exists for this generated four-second source, so transcription accuracy and musical correctness were not scored.",
+    "The validated source produced notes only from 1.7104166666666667 to 3.060416666666667 seconds; this is an observed model result, not an accuracy claim.",
+    "The current adapter emits velocity 100 for every note because MuScriptor note events do not provide velocity through this integration.",
+    "This run validates Apple Silicon MPS only; CUDA, Colab T4, Windows, and CPU throughput were not measured here.",
+    "The checkpoint is CC BY-NC 4.0. Commercial production use remains blocked until a separate commercial license is obtained."
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "verificationDate": "2026-07-15",
+  "host": {
+    "os": "macOS 26.5.2 (25F84)",
+    "hardware": "MacBook Air, Apple M2, 8 CPU cores, 16 GB unified memory",
+    "node": "23.7.0",
+    "python": "3.12.8"
+  },
+  "stableAudioWarmGeneration": {
+    "provider": "stable-audio-3",
+    "model": "medium",
+    "modelId": "stabilityai/stable-audio-3-optimized",
+    "modelRevision": "c2949a435de2392fe49c5914c52bc174cfc05a9b",
+    "codeRevision": "b32763cf3b71c160f10a0daa4fa0e0d471b5772e",
+    "runtime": "mlx",
+    "route": "apple-mlx",
+    "device": "metal",
+    "durationSeconds": 10,
+    "elapsedSeconds": 10.438636915991083,
+    "sampleRate": 44100,
+    "sourcePeak": 0.972889244556427,
+    "outputPeak": 0.972889244556427,
+    "peakProtectionApplied": false,
+    "status": "completed"
+  },
+  "stableAudioCancellation": {
+    "provider": "stable-audio-3",
+    "requestedDurationSeconds": 30,
+    "acknowledgementSeconds": 0.0075993750360794365,
+    "terminalSecondsAfterAcknowledgement": 0.0008258339948952198,
+    "terminalStatus": "cancelled",
+    "resultCommitted": false,
+    "workerProcessRemainingAfterTest": false
+  },
+  "muscriptorThirtySecondExtraction": {
+    "provider": "muscriptor",
+    "model": "medium",
+    "modelId": "MuScriptor/muscriptor-medium",
+    "modelRevision": "f32236969308476e01fd3aae67357de5feb05a2d",
+    "codeRevision": "6c1460cc75e5f120948de7656da05b2c489e8715",
+    "runtime": "pytorch-mps",
+    "route": "apple-mps",
+    "inputDurationSeconds": 30,
+    "elapsedSeconds": 5.198401333007496,
+    "noteCount": 4,
+    "status": "completed",
+    "accuracyClaim": "not evaluated; this latency fixture has no annotated ground truth"
+  },
+  "muscriptorSilence": {
+    "inputDurationSeconds": 1,
+    "elapsedSeconds": 0.7935482500470243,
+    "noteCount": 0,
+    "status": "completed"
+  }
+}

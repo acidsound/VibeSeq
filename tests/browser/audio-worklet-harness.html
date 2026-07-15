@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VibeSeq AudioWorklet Harness</title>
+    <style>
+      body { margin: 2rem; background: #10100f; color: #f3efe5; font: 16px/1.5 system-ui, sans-serif; }
+      button { padding: 0.7rem 1rem; font: inherit; }
+      pre { max-width: 70rem; padding: 1rem; overflow: auto; background: #1b1b19; }
+    </style>
+  </head>
+  <body>
+    <h1>AudioWorklet browser harness</h1>
+    <button id="run" type="button" disabled>Run worklet transport</button>
+    <pre id="result" data-status="loading">loading</pre>
+    <script type="module">
+      import {
+        AudioWorkletPlaybackEngine,
+        detectAudioWorkletSupport,
+      } from '../../src/core/audio/audioWorkletEngine.ts'
+
+      const now = '2026-07-15T00:00:00.000Z'
+      const project = {
+        schemaVersion: 4,
+        id: 'browser-worklet-harness',
+        name: 'Browser worklet harness',
+        bpm: 120,
+        sampleRate: 44_100,
+        timeSignature: { numerator: 4, denominator: 4 },
+        arrangement: { overlapPolicy: 'prevent' },
+        tracks: [{
+          id: 'midi-track',
+          name: 'MIDI',
+          kind: 'midi',
+          color: '#5dd6d1',
+          gain: 0.6,
+          pan: 0,
+          mute: false,
+          solo: false,
+          midi: {
+            channel: 0,
+            instrument: { kind: 'melodic', playbackId: 'WebAudio-TinySynth', program: 0 },
+          },
+          clips: [{
+            id: 'midi-clip',
+            name: 'MIDI',
+            kind: 'midi',
+            startBeat: 0,
+            durationBeats: 1,
+            offsetBeats: 0,
+            gain: 1,
+            fadeIn: 0,
+            fadeOut: 0,
+            notes: [{ id: 'note', pitch: 60, startBeat: 0, durationBeats: 0.5, velocity: 0.7 }],
+            provenance: { source: 'user', createdAt: now },
+          }],
+        }],
+        loop: { enabled: false, startBeat: 0, endBeat: 1 },
+        assets: [],
+        jobs: [],
+        masterGain: 0.5,
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      const result = document.querySelector('#result')
+      const run = document.querySelector('#run')
+      const states = []
+      const errors = []
+      const meters = []
+      const engine = new AudioWorkletPlaybackEngine(project, {
+        onStateChange: (state) => states.push(state),
+        onError: (error) => errors.push({ code: error.code, message: error.message }),
+        onMeter: (meter) => meters.push(meter.master),
+      })
+      const initialized = engine.initialize()
+        .then(() => {
+          result.dataset.status = 'ready'
+          result.textContent = 'ready'
+          run.disabled = false
+        })
+        .catch((error) => {
+          result.dataset.status = 'failed'
+          result.textContent = JSON.stringify({ code: error.code, message: error.message }, null, 2)
+        })
+
+      run.addEventListener('click', async () => {
+        try {
+          await initialized
+          await engine.play({ fromBeat: 0, toBeat: 1 })
+          await new Promise((resolve) => setTimeout(resolve, 120))
+          const payload = {
+            support: detectAudioWorkletSupport(),
+            nodeCreated: engine.node instanceof AudioWorkletNode,
+            contextState: engine.context?.state,
+            playbackState: engine.getState(),
+            positionBeat: engine.getPositionBeat(),
+            states,
+            meterCount: meters.length,
+            errors,
+          }
+          result.dataset.status = payload.nodeCreated
+            && payload.contextState === 'running'
+            && payload.playbackState === 'playing'
+            && payload.errors.length === 0
+            ? 'passed'
+            : 'failed'
+          result.textContent = JSON.stringify(payload, null, 2)
+        } catch (error) {
+          result.dataset.status = 'failed'
+          result.textContent = JSON.stringify({ code: error.code, message: error.message }, null, 2)
+        }
+      })
+    </script>
+  </body>
+</html>

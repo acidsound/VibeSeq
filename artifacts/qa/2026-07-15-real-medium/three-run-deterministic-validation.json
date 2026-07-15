@@ -1,0 +1,224 @@
+[
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-01-attempt-01-project.vibeseq",
+    "kind": "vibeseq-project",
+    "valid": true,
+    "bytes": 2862422,
+    "sha256": "fa65f435aa0c1ca5d82ad6716ecccd5ad06dbb056670b44c9aa43efd54f30f77",
+    "format": "vibeseq-project",
+    "serializationVersion": 1,
+    "schemaVersion": 3,
+    "checkpointId": "dfb7065c-f47f-4572-bbad-20f508dbe1f7",
+    "projectId": "project-local-default",
+    "tracks": 2,
+    "clips": 4,
+    "assets": 1,
+    "jobs": 3,
+    "candidates": 2,
+    "embeddedBinaryCount": 3,
+    "embeddedBinaryBytes": 2116932,
+    "uniqueEmbeddedBinaryCount": 2,
+    "uniqueEmbeddedBinaryBytes": 1411288,
+    "verifiedBinaryCount": 3,
+    "embeddedBinaries": [
+      {
+        "path": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-01-attempt-01-project.vibeseq: document.project.assets[0].blob",
+        "mimeType": "audio/wav",
+        "bytes": 705644,
+        "sha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "declaredSha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "hashVerified": true
+      },
+      {
+        "path": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-01-attempt-01-project.vibeseq: document.session.candidates[0].blob",
+        "mimeType": "audio/wav",
+        "bytes": 705644,
+        "sha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "declaredSha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "hashVerified": true
+      },
+      {
+        "path": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-01-attempt-01-project.vibeseq: document.session.candidates[1].blob",
+        "mimeType": "audio/wav",
+        "bytes": 705644,
+        "sha256": "6bb19d9e43c62f00866d60bfd5f832124acd72c8ae3c52b4543810d5d1e4d0a3",
+        "declaredSha256": "6bb19d9e43c62f00866d60bfd5f832124acd72c8ae3c52b4543810d5d1e4d0a3",
+        "hashVerified": true
+      }
+    ]
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-01-attempt-01-full-mix-24bit.wav",
+    "kind": "wav",
+    "valid": true,
+    "bytes": 2083772,
+    "sha256": "e31246d6db20f862ab9c5091283e9a59fc5a2ddad9b53c356ee9bd8959687b2a",
+    "audioFormat": "PCM",
+    "channels": 2,
+    "sampleRate": 44100,
+    "bitDepth": 24,
+    "frames": 347288,
+    "durationSeconds": 7.8750113378684805,
+    "peak": 0.5552013582231233,
+    "nonSilentSamples": 683534,
+    "fullScaleSamples": 0
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-01-attempt-01-arrangement.mid",
+    "kind": "midi",
+    "valid": true,
+    "bytes": 357,
+    "sha256": "390b8d08bbf40eece9df3c89664da8e4122a8335d93b91a36bce1333698d1dd5",
+    "format": 1,
+    "tracks": 2,
+    "ppq": 480
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-02-attempt-01-project.vibeseq",
+    "kind": "vibeseq-project",
+    "valid": true,
+    "bytes": 2862422,
+    "sha256": "088b40092c8b31f23db7781bb45d3314dd005191c541a4ac48788e96012ff94d",
+    "format": "vibeseq-project",
+    "serializationVersion": 1,
+    "schemaVersion": 3,
+    "checkpointId": "e7d38918-5e1c-41f1-8d52-31a9c7c1f1f8",
+    "projectId": "project-local-default",
+    "tracks": 2,
+    "clips": 4,
+    "assets": 1,
+    "jobs": 3,
+    "candidates": 2,
+    "embeddedBinaryCount": 3,
+    "embeddedBinaryBytes": 2116932,
+    "uniqueEmbeddedBinaryCount": 2,
+    "uniqueEmbeddedBinaryBytes": 1411288,
+    "verifiedBinaryCount": 3,
+    "embeddedBinaries": [
+      {
+        "path": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-02-attempt-01-project.vibeseq: document.project.assets[0].blob",
+        "mimeType": "audio/wav",
+        "bytes": 705644,
+        "sha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "declaredSha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "hashVerified": true
+      },
+      {
+        "path": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-02-attempt-01-project.vibeseq: document.session.candidates[0].blob",
+        "mimeType": "audio/wav",
+        "bytes": 705644,
+        "sha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "declaredSha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "hashVerified": true
+      },
+      {
+        "path": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-02-attempt-01-project.vibeseq: document.session.candidates[1].blob",
+        "mimeType": "audio/wav",
+        "bytes": 705644,
+        "sha256": "6bb19d9e43c62f00866d60bfd5f832124acd72c8ae3c52b4543810d5d1e4d0a3",
+        "declaredSha256": "6bb19d9e43c62f00866d60bfd5f832124acd72c8ae3c52b4543810d5d1e4d0a3",
+        "hashVerified": true
+      }
+    ]
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-02-attempt-01-full-mix-24bit.wav",
+    "kind": "wav",
+    "valid": true,
+    "bytes": 2083772,
+    "sha256": "e31246d6db20f862ab9c5091283e9a59fc5a2ddad9b53c356ee9bd8959687b2a",
+    "audioFormat": "PCM",
+    "channels": 2,
+    "sampleRate": 44100,
+    "bitDepth": 24,
+    "frames": 347288,
+    "durationSeconds": 7.8750113378684805,
+    "peak": 0.5552013582231233,
+    "nonSilentSamples": 683534,
+    "fullScaleSamples": 0
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-02-attempt-01-arrangement.mid",
+    "kind": "midi",
+    "valid": true,
+    "bytes": 357,
+    "sha256": "390b8d08bbf40eece9df3c89664da8e4122a8335d93b91a36bce1333698d1dd5",
+    "format": 1,
+    "tracks": 2,
+    "ppq": 480
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-03-attempt-01-project.vibeseq",
+    "kind": "vibeseq-project",
+    "valid": true,
+    "bytes": 2862422,
+    "sha256": "c6489d3c3efb23c1e19d5b0c8cbcde878532cc14f668058d3597edf3eb6ba741",
+    "format": "vibeseq-project",
+    "serializationVersion": 1,
+    "schemaVersion": 3,
+    "checkpointId": "660f81ff-9932-480d-9e64-56ba25db5568",
+    "projectId": "project-local-default",
+    "tracks": 2,
+    "clips": 4,
+    "assets": 1,
+    "jobs": 3,
+    "candidates": 2,
+    "embeddedBinaryCount": 3,
+    "embeddedBinaryBytes": 2116932,
+    "uniqueEmbeddedBinaryCount": 2,
+    "uniqueEmbeddedBinaryBytes": 1411288,
+    "verifiedBinaryCount": 3,
+    "embeddedBinaries": [
+      {
+        "path": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-03-attempt-01-project.vibeseq: document.project.assets[0].blob",
+        "mimeType": "audio/wav",
+        "bytes": 705644,
+        "sha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "declaredSha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "hashVerified": true
+      },
+      {
+        "path": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-03-attempt-01-project.vibeseq: document.session.candidates[0].blob",
+        "mimeType": "audio/wav",
+        "bytes": 705644,
+        "sha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "declaredSha256": "b6da151160147d043d1904247e8c68919cd42405db8aa33ac98338aa531c98f0",
+        "hashVerified": true
+      },
+      {
+        "path": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-03-attempt-01-project.vibeseq: document.session.candidates[1].blob",
+        "mimeType": "audio/wav",
+        "bytes": 705644,
+        "sha256": "6bb19d9e43c62f00866d60bfd5f832124acd72c8ae3c52b4543810d5d1e4d0a3",
+        "declaredSha256": "6bb19d9e43c62f00866d60bfd5f832124acd72c8ae3c52b4543810d5d1e4d0a3",
+        "hashVerified": true
+      }
+    ]
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-03-attempt-01-full-mix-24bit.wav",
+    "kind": "wav",
+    "valid": true,
+    "bytes": 2083772,
+    "sha256": "e31246d6db20f862ab9c5091283e9a59fc5a2ddad9b53c356ee9bd8959687b2a",
+    "audioFormat": "PCM",
+    "channels": 2,
+    "sampleRate": 44100,
+    "bitDepth": 24,
+    "frames": 347288,
+    "durationSeconds": 7.8750113378684805,
+    "peak": 0.5552013582231233,
+    "nonSilentSamples": 683534,
+    "fullScaleSamples": 0
+  },
+  {
+    "file": "artifacts/qa/2026-07-15-real-medium/browser-real-medium-run-03-attempt-01-arrangement.mid",
+    "kind": "midi",
+    "valid": true,
+    "bytes": 357,
+    "sha256": "390b8d08bbf40eece9df3c89664da8e4122a8335d93b91a36bce1333698d1dd5",
+    "format": 1,
+    "tracks": 2,
+    "ppq": 480
+  }
+]

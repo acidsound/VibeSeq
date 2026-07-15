@@ -1,0 +1,69 @@
+{
+  "recordedAt": "2026-07-15T12:24:24.063Z",
+  "browser": "chromium",
+  "method": "renderProjectToPcm compared sample-by-sample with OfflineAudioContext StereoPannerNode",
+  "thresholdDbfs": -90,
+  "observations": [
+    {
+      "sampleRate": 44100,
+      "pan": -1,
+      "nullPeak": 2.9802322387695312e-8,
+      "nullPeakDbfs": -150.5149978319906
+    },
+    {
+      "sampleRate": 44100,
+      "pan": -0.5,
+      "nullPeak": 0,
+      "nullPeakDbfs": -313.07119549054045
+    },
+    {
+      "sampleRate": 44100,
+      "pan": 0,
+      "nullPeak": 1.408343814298494e-17,
+      "nullPeakDbfs": -313.07119549054045
+    },
+    {
+      "sampleRate": 44100,
+      "pan": 0.5,
+      "nullPeak": 0,
+      "nullPeakDbfs": -313.07119549054045
+    },
+    {
+      "sampleRate": 44100,
+      "pan": 1,
+      "nullPeak": 2.9802322387695312e-8,
+      "nullPeakDbfs": -150.5149978319906
+    },
+    {
+      "sampleRate": 48000,
+      "pan": -1,
+      "nullPeak": 5.960464477539063e-8,
+      "nullPeakDbfs": -144.49439791871097
+    },
+    {
+      "sampleRate": 48000,
+      "pan": -0.5,
+      "nullPeak": 0,
+      "nullPeakDbfs": -313.07119549054045
+    },
+    {
+      "sampleRate": 48000,
+      "pan": 0,
+      "nullPeak": 1.408343814298494e-17,
+      "nullPeakDbfs": -313.07119549054045
+    },
+    {
+      "sampleRate": 48000,
+      "pan": 0.5,
+      "nullPeak": 0,
+      "nullPeakDbfs": -313.07119549054045
+    },
+    {
+      "sampleRate": 48000,
+      "pan": 1,
+      "nullPeak": 5.960464477539063e-8,
+      "nullPeakDbfs": -144.49439791871097
+    }
+  ],
+  "worstNullPeakDbfs": -144.49439791871097
+}

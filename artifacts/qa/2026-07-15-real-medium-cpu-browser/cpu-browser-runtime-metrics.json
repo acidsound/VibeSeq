@@ -1,0 +1,162 @@
+{
+  "recordedAt": "2026-07-15T12:06:16.131Z",
+  "source": "API durable job timestamps from three consecutive browser workflows",
+  "health": {
+    "target": "local",
+    "hardware": {
+      "preferredDevice": "cpu",
+      "devices": [
+        "cpu"
+      ],
+      "forceCpu": true,
+      "system": "Darwin",
+      "machine": "arm64",
+      "cudaName": null,
+      "cudaCapability": null
+    },
+    "generation": {
+      "provider": "stable-audio-3",
+      "model": "medium",
+      "modelId": "stabilityai/stable-audio-3-optimized",
+      "modelRevision": "c2949a435de2392fe49c5914c52bc174cfc05a9b",
+      "runtime": "tflite-w8a8-dyn",
+      "route": "cpu-tflite",
+      "device": "cpu",
+      "ready": true
+    },
+    "transcription": {
+      "provider": "muscriptor",
+      "model": "medium",
+      "modelId": "MuScriptor/muscriptor-medium",
+      "modelRevision": "f32236969308476e01fd3aae67357de5feb05a2d",
+      "runtime": "pytorch-cpu",
+      "route": "cpu-pytorch",
+      "device": "cpu",
+      "ready": true
+    }
+  },
+  "jobs": [
+    {
+      "run": "run-01-attempt-01",
+      "kind": "generation",
+      "id": "7a1b896704354a69bb15a0408b2416fb",
+      "status": "completed",
+      "createdAt": "2026-07-15T12:03:04.767860Z",
+      "updatedAt": "2026-07-15T12:03:19.718838Z",
+      "route": "cpu-tflite",
+      "runtime": "tflite-w8a8-dyn",
+      "device": "cpu",
+      "elapsedSeconds": 14.95
+    },
+    {
+      "run": "run-01-attempt-01",
+      "kind": "generation",
+      "id": "cbeafe3896924ede82d5cea2d579305c",
+      "status": "completed",
+      "createdAt": "2026-07-15T12:03:19.980752Z",
+      "updatedAt": "2026-07-15T12:03:27.943891Z",
+      "route": "cpu-tflite",
+      "runtime": "tflite-w8a8-dyn",
+      "device": "cpu",
+      "elapsedSeconds": 7.96
+    },
+    {
+      "run": "run-01-attempt-01",
+      "kind": "transcription",
+      "id": "30dcbdf6c011483c9175affc4bd93bdc",
+      "status": "completed",
+      "createdAt": "2026-07-15T12:03:29.138890Z",
+      "updatedAt": "2026-07-15T12:03:38.386707Z",
+      "route": "cpu-pytorch",
+      "runtime": "pytorch-cpu",
+      "device": "cpu",
+      "elapsedSeconds": 9.25
+    },
+    {
+      "run": "run-02-attempt-01",
+      "kind": "generation",
+      "id": "ad27379e4fbf4920b46268230f50c517",
+      "status": "completed",
+      "createdAt": "2026-07-15T12:03:44.798293Z",
+      "updatedAt": "2026-07-15T12:04:01.232534Z",
+      "route": "cpu-tflite",
+      "runtime": "tflite-w8a8-dyn",
+      "device": "cpu",
+      "elapsedSeconds": 16.43
+    },
+    {
+      "run": "run-02-attempt-01",
+      "kind": "generation",
+      "id": "3222f34a8a4d4a2282db8bfdf802a040",
+      "status": "completed",
+      "createdAt": "2026-07-15T12:04:01.448006Z",
+      "updatedAt": "2026-07-15T12:04:18.791884Z",
+      "route": "cpu-tflite",
+      "runtime": "tflite-w8a8-dyn",
+      "device": "cpu",
+      "elapsedSeconds": 17.34
+    },
+    {
+      "run": "run-02-attempt-01",
+      "kind": "transcription",
+      "id": "22c32d043a4442498de3790ab52f0f0f",
+      "status": "completed",
+      "createdAt": "2026-07-15T12:04:20.262159Z",
+      "updatedAt": "2026-07-15T12:04:27.096258Z",
+      "route": "cpu-pytorch",
+      "runtime": "pytorch-cpu",
+      "device": "cpu",
+      "elapsedSeconds": 6.83
+    },
+    {
+      "run": "run-03-attempt-01",
+      "kind": "generation",
+      "id": "6782846747af41f29a73385b5542c9a2",
+      "status": "completed",
+      "createdAt": "2026-07-15T12:04:36.548607Z",
+      "updatedAt": "2026-07-15T12:05:03.124779Z",
+      "route": "cpu-tflite",
+      "runtime": "tflite-w8a8-dyn",
+      "device": "cpu",
+      "elapsedSeconds": 26.58
+    },
+    {
+      "run": "run-03-attempt-01",
+      "kind": "generation",
+      "id": "a3c2b80d138942d4b25eee5c540a0187",
+      "status": "completed",
+      "createdAt": "2026-07-15T12:05:03.397628Z",
+      "updatedAt": "2026-07-15T12:05:24.612411Z",
+      "route": "cpu-tflite",
+      "runtime": "tflite-w8a8-dyn",
+      "device": "cpu",
+      "elapsedSeconds": 21.22
+    },
+    {
+      "run": "run-03-attempt-01",
+      "kind": "transcription",
+      "id": "560981cdb7234862bfe058e7aa68a348",
+      "status": "completed",
+      "createdAt": "2026-07-15T12:05:26.199442Z",
+      "updatedAt": "2026-07-15T12:05:32.805903Z",
+      "route": "cpu-pytorch",
+      "runtime": "pytorch-cpu",
+      "device": "cpu",
+      "elapsedSeconds": 6.61
+    }
+  ],
+  "summary": {
+    "generation": {
+      "samples": 6,
+      "minSeconds": 7.96,
+      "maxSeconds": 26.58,
+      "meanSeconds": 17.41
+    },
+    "transcription": {
+      "samples": 3,
+      "minSeconds": 6.61,
+      "maxSeconds": 9.25,
+      "meanSeconds": 7.56
+    }
+  }
+}

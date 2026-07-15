@@ -1,0 +1,126 @@
+{
+  "run": "run-03-attempt-01",
+  "target": "local-apple",
+  "prompt": "warm neo-soul drums, loose pocket, electric piano texture, instrumental",
+  "bpm": 120,
+  "generation": [
+    {
+      "jobId": "52e0e084a73e43f09ed6547061355a6f",
+      "seed": 62911,
+      "prompt": "warm neo-soul drums, loose pocket, electric piano texture, instrumental",
+      "duration": 4,
+      "provider": "stable-audio-3",
+      "model": "medium",
+      "modelId": "stabilityai/stable-audio-3-optimized",
+      "modelRevision": "c2949a435de2392fe49c5914c52bc174cfc05a9b",
+      "codeRevision": "b32763cf3b71c160f10a0daa4fa0e0d471b5772e",
+      "runtime": "mlx",
+      "route": "apple-mlx",
+      "device": "metal"
+    },
+    {
+      "jobId": "09bd9a82b9f6433b81643597b016e340",
+      "seed": 71537,
+      "prompt": "warm neo-soul drums, loose pocket, electric piano texture, instrumental",
+      "duration": 4,
+      "provider": "stable-audio-3",
+      "model": "medium",
+      "modelId": "stabilityai/stable-audio-3-optimized",
+      "modelRevision": "c2949a435de2392fe49c5914c52bc174cfc05a9b",
+      "codeRevision": "b32763cf3b71c160f10a0daa4fa0e0d471b5772e",
+      "runtime": "mlx",
+      "route": "apple-mlx",
+      "device": "metal"
+    }
+  ],
+  "transcription": {
+    "jobId": "065099aad8df4da995f79be14105b50e",
+    "provider": "muscriptor",
+    "model": "medium",
+    "modelId": "MuScriptor/muscriptor-medium",
+    "modelRevision": "f32236969308476e01fd3aae67357de5feb05a2d",
+    "codeRevision": "6c1460cc75e5f120948de7656da05b2c489e8715",
+    "runtime": "pytorch-mps",
+    "route": "apple-mps",
+    "device": "mps",
+    "returnedNotes": 13,
+    "extractedNotes": 13,
+    "excludedNotes": 0,
+    "editedNotes": 4
+  },
+  "arrangement": {
+    "trimmedAudioLabel": "Selected, Variation 2, audio region, starts at beat 0.00, duration 7.75 beats",
+    "fadeIn": "0.03",
+    "fadeOut": "0.05",
+    "movedSplitLabel": "Selected, Variation 2 copy B, audio region, starts at beat 12.00, duration 3.75 beats",
+    "loopStartBeat": 0.25,
+    "loopEndBeat": 16.25,
+    "firstTrackAfterReload": "Extracted MIDI"
+  },
+  "exports": {
+    "projectBundle": {
+      "file": "browser-real-medium-run-03-attempt-01-project.vibeseq",
+      "format": "vibeseq-project",
+      "serializationVersion": 1,
+      "schemaVersion": 3,
+      "checkpointId": "2e5f928f-867b-4652-a8e3-fb0b58a00b34",
+      "projectName": "Untitled Sequence",
+      "tracks": 2,
+      "clips": 4,
+      "jobs": 3,
+      "candidates": 2,
+      "mediaRecords": 3,
+      "hashesVerified": 3,
+      "bytes": 2859791
+    },
+    "wav": {
+      "file": "browser-real-medium-run-03-attempt-01-full-mix-24bit.wav",
+      "audioFormat": 1,
+      "channels": 2,
+      "sampleRate": 44100,
+      "byteRate": 264600,
+      "blockAlign": 6,
+      "bitDepth": 24,
+      "dataLength": 2083728,
+      "dataOffset": 44
+    },
+    "midi": {
+      "file": "browser-real-medium-run-03-attempt-01-arrangement.mid",
+      "format": 1,
+      "declaredTracks": 2,
+      "parsedTracks": 2,
+      "ppq": 480,
+      "noteOnPitches": [
+        46,
+        46,
+        56,
+        60,
+        61,
+        64,
+        38,
+        54,
+        45,
+        55,
+        59,
+        61,
+        64
+      ],
+      "noteOnVelocities": [
+        106,
+        106,
+        106,
+        106,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    "screenshot": "browser-real-medium-run-03-attempt-01-final.png"
+  }
+}

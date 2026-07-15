@@ -1,0 +1,67 @@
+{
+  "scope": "Single-run execution evidence; these measurements are not a p95 claim.",
+  "hardware": {
+    "machine": "Apple M2 MacBook Air",
+    "memoryGiB": 16,
+    "runtimeDevice": "CPU"
+  },
+  "provenance": {
+    "model": "medium",
+    "modelId": "stabilityai/stable-audio-3-optimized",
+    "modelRevision": "c2949a435de2392fe49c5914c52bc174cfc05a9b",
+    "codeRepository": "https://github.com/Stability-AI/stable-audio-3",
+    "codeRevision": "b32763cf3b71c160f10a0daa4fa0e0d471b5772e",
+    "runtime": "ai-edge-litert 2.1.6",
+    "route": "cpu-tflite",
+    "precision": "w8a8-dyn",
+    "dit": "medium",
+    "decoder": "same-l",
+    "smallModelFallback": false
+  },
+  "runs": [
+    {
+      "durationSeconds": 1,
+      "steps": 1,
+      "threads": 4,
+      "wallSeconds": 13.11,
+      "maximumResidentBytes": 3618308096,
+      "sourcePeak": 1.0643309354782104,
+      "outputPeak": 0.9794899821281433,
+      "peakAttenuationDb": 0.721534,
+      "clippedSamples": 0,
+      "sha256": "03b5863e0ba08f256eefdb25cc6c6c9493f69a21ae3827b6127329eadfd4efbf"
+    },
+    {
+      "durationSeconds": 4,
+      "steps": 8,
+      "threads": 8,
+      "wallSeconds": 20.89,
+      "maximumResidentBytes": 3690577920,
+      "sourcePeak": 0.9566068053245544,
+      "outputPeak": 0.9566068053245544,
+      "peakAttenuationDb": 0.0,
+      "clippedSamples": 0,
+      "sha256": "7b59d697143471eba4f366cda413d25d235238c2aeb7ad643c9c7083b12eb5e8"
+    },
+    {
+      "durationSeconds": 10,
+      "steps": 8,
+      "threads": 8,
+      "wallSeconds": 164.92,
+      "maximumResidentBytes": 4712480768,
+      "sourcePeak": 1.151315450668335,
+      "outputPeak": 0.9794899821281433,
+      "peakAttenuationDb": 1.403887,
+      "clippedSamples": 0,
+      "sha256": "023df2fdb8533cbfa635a2d28570d1caff257a14fee0f07a055bdb6b08d96965"
+    }
+  ],
+  "tenSecondOutput": {
+    "sampleRate": 44100,
+    "channels": 2,
+    "frames": 441000,
+    "sampleWidthBytes": 2,
+    "nonSilent": true,
+    "rms": 0.11453055385155438
+  }
+}

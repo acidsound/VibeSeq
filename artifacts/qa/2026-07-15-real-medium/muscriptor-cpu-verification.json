@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-07-15T09:00:16Z",
+  "status": "verified",
+  "scope": "Fresh-process MuScriptor medium CPU execution evidence; not a p95 or accuracy claim.",
+  "host": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "hardware": "MacBook Air, Apple M2, 8 CPU cores, 16 GB unified memory",
+    "python": "3.12.8",
+    "torch": "2.7.1"
+  },
+  "model": {
+    "provider": "muscriptor",
+    "variant": "medium",
+    "modelId": "MuScriptor/muscriptor-medium",
+    "modelRevision": "f32236969308476e01fd3aae67357de5feb05a2d",
+    "codeRepository": "https://github.com/muscriptor/muscriptor",
+    "codeRevision": "6c1460cc75e5f120948de7656da05b2c489e8715",
+    "installedPackageVersion": "0.2.2a1",
+    "installedCodeRevisionVerifiedFromDirectUrlMetadata": true,
+    "license": "CC BY-NC 4.0",
+    "smallFallbackUsed": false,
+    "demoFallbackUsed": false,
+    "files": {
+      "config.json": {
+        "bytes": 126,
+        "sha256": "43e13a70fc9ae0af36b7447c06f3eac2282daeb69d79c1ff840ede7fdaa26a3b"
+      },
+      "model.safetensors": {
+        "bytes": 1228144472,
+        "sha256": "ac80adbdf85d87231735fd948af7013441c0afced316c4e9067fd5d8a7fb97ec",
+        "exactRevisionHubEtag": "ac80adbdf85d87231735fd948af7013441c0afced316c4e9067fd5d8a7fb97ec"
+      }
+    },
+    "cacheIntegrityEvidence": "The exact-revision Hub commit, ETag, and byte size matched the local full-file SHA-256 and byte size. The generic hf cache verify result was not accepted as evidence because the gated repository response supplied a masked expected checksum."
+  },
+  "runtime": {
+    "deviceSelectionHarness": "vibeseq_inference.providers.muscriptor.available_devices returned only cpu",
+    "device": "cpu",
+    "runtime": "pytorch-cpu",
+    "route": "cpu-pytorch",
+    "huggingFaceOfflineMode": true,
+    "mpsAllowed": false,
+    "cudaAllowed": false
+  },
+  "fixtures": {
+    "musical": {
+      "id": "muscriptor-cpu-fixture-v1",
+      "version": 1,
+      "path": "artifacts/qa/2026-07-15-real-medium/muscriptor-cpu-fixture-v1.wav",
+      "sourceType": "deterministic synthetic test signal",
+      "thirdPartyAudio": false,
+      "sha256": "3016a432c08c93ea5a11b3c046e6cf17ea92445bb19c1330edd940d6040d6c0e",
+      "channels": 2,
+      "sampleRate": 44100,
+      "frames": 1323000,
+      "durationSeconds": 30.0,
+      "sampleWidthBytes": 2,
+      "peakPcm": 25558,
+      "rms": 0.3278651854470273,
+      "generationContract": {
+        "sections": [
+          "0-8s monophonic MIDI pitches 60,64,67,69,67,64,62,60",
+          "8-16s bass MIDI pitches 36,43,45,41",
+          "16-24s triads 60/64/67,65/69/72,67/71/74,57/60/64",
+          "24-30s arpeggio 48,55,60,64,67,64,60,55,48,55,60,67 with deterministic noise transients"
+        ],
+        "noiseSeed": 20260715,
+        "attackReleaseSeconds": 0.02,
+        "normalizedPeak": 0.78
+      }
+    },
+    "silence": {
+      "id": "muscriptor-cpu-silence-v1",
+      "version": 1,
+      "path": "artifacts/qa/2026-07-15-real-medium/muscriptor-cpu-silence-v1.wav",
+      "sourceType": "bit-exact zero PCM",
+      "sha256": "4057d79667b576cff0a0c2a32dc8c1eb80c2cdedf9b52d1de53d37c02b2e647c",
+      "channels": 2,
+      "sampleRate": 44100,
+      "frames": 44100,
+      "durationSeconds": 1.0,
+      "sampleWidthBytes": 2,
+      "nonzeroSamples": 0
+    }
+  },
+  "runs": {
+    "thirtySecondFixture": {
+      "input": "artifacts/qa/2026-07-15-real-medium/muscriptor-cpu-fixture-v1.wav",
+      "output": "artifacts/qa/2026-07-15-real-medium/muscriptor-medium-cpu-fixture-v1.mid",
+      "providerElapsedSeconds": 14.310477040999103,
+      "processWallSeconds": 14.92,
+      "maximumResidentSetBytes": 2353152000,
+      "swaps": 0,
+      "device": "cpu",
+      "runtime": "pytorch-cpu",
+      "route": "cpu-pytorch",
+      "modelRevision": "f32236969308476e01fd3aae67357de5feb05a2d",
+      "noteCount": 16,
+      "pitchMin": 41,
+      "pitchMax": 69,
+      "firstNoteSeconds": 0.99,
+      "lastNoteEndSeconds": 29.520000000000003,
+      "progressFinal": 0.98,
+      "status": "completed"
+    },
+    "oneSecondSilence": {
+      "input": "artifacts/qa/2026-07-15-real-medium/muscriptor-cpu-silence-v1.wav",
+      "output": "artifacts/qa/2026-07-15-real-medium/muscriptor-medium-cpu-silence-v1.mid",
+      "providerElapsedSeconds": 3.059875832987018,
+      "processWallSeconds": 3.56,
+      "maximumResidentSetBytes": 2678685696,
+      "swaps": 0,
+      "device": "cpu",
+      "runtime": "pytorch-cpu",
+      "route": "cpu-pytorch",
+      "modelRevision": "f32236969308476e01fd3aae67357de5feb05a2d",
+      "noteCount": 0,
+      "progressFinal": 0.98,
+      "status": "completed"
+    }
+  },
+  "midiValidation": {
+    "thirtySecondFixture": {
+      "path": "artifacts/qa/2026-07-15-real-medium/muscriptor-medium-cpu-fixture-v1.mid",
+      "bytes": 246,
+      "sha256": "c25da3e7b2f6467759bef7bbec1e0079ebe717f67d8da9d5842dfd07d0d1e3ff",
+      "headerAscii": "MThd",
+      "format": 1,
+      "tracks": 3,
+      "ticksPerBeat": 480,
+      "lengthSeconds": 29.519791666666666,
+      "noteCount": 16,
+      "pitchMin": 41,
+      "pitchMax": 69,
+      "danglingNoteOns": 0
+    },
+    "oneSecondSilence": {
+      "path": "artifacts/qa/2026-07-15-real-medium/muscriptor-medium-cpu-silence-v1.mid",
+      "bytes": 33,
+      "sha256": "b4134d5cce88b9049baca7d9efae3f7d592a42b22a47e4398cab2100dc75e10b",
+      "headerAscii": "MThd",
+      "format": 1,
+      "tracks": 1,
+      "ticksPerBeat": 480,
+      "lengthSeconds": 0,
+      "noteCount": 0,
+      "danglingNoteOns": 0
+    }
+  },
+  "limitations": [
+    "The musical fixture is versioned and deterministic but has no aligned ground-truth MIDI, so transcription accuracy was not scored.",
+    "Each latency is one fresh-process measurement, not a p95 distribution.",
+    "The current adapter emits velocity 100 because MuScriptor note events do not expose velocity through this integration.",
+    "CPU execution was measured only on this Apple M2 host; Windows, Linux, and Colab CPU throughput were not measured.",
+    "The MuScriptor medium checkpoint is CC BY-NC 4.0. Commercial production use remains blocked until a separate commercial license is obtained."
+  ]
+}
