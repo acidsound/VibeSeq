@@ -4,6 +4,11 @@ VibeSeq is an AI-assisted, local-first WebDAW built around one continuous loop:
 
 `prompt → generate audio → place → extract MIDI → edit → arrange → play/export`
 
+![VibeSeq working prototype with generated audio, linked MuScriptor MIDI regions, and multi-note piano-roll editing](docs/vibeseq-muscriptor-workflow.png)
+
+*Generated audio and its linked MuScriptor Medium transcription arranged and
+edited together in the VibeSeq Studio.*
+
 The current repository contains a working Studio, a local inference service, and
 a separate Colab T4 launcher. The default `procedural-demo` and `signal-demo`
 providers are deterministic workflow fixtures. They produce real WAV/MIDI files
