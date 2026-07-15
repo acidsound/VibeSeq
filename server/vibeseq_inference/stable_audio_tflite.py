@@ -4,7 +4,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -18,10 +17,12 @@ from huggingface_hub import hf_hub_download
 from .model_manifest import STABLE_AUDIO_3_MEDIUM_OPTIMIZED
 from .security import safe_error_message
 from .stable_audio_mlx import (
+    bundled_runtime_checkout,
     ensure_pinned_source_checkout,
     runtime_checkout,
     source_checkout_cached,
 )
+from .worker_process import isolated_worker_command
 
 
 _WEIGHT_LINKS = {
@@ -49,10 +50,18 @@ def runtime_root() -> Path:
 
 def tflite_code_cached() -> bool:
     root = runtime_root()
-    return bool(
+    if (
         source_checkout_cached()
         and (root / "scripts" / "sa3_tflite.py").is_file()
         and (root / "models" / "tokenizer.model").is_file()
+    ):
+        return True
+    bundled = bundled_runtime_checkout()
+    bundled_root = bundled / "optimized" / "tflite" if bundled else None
+    return bool(
+        bundled_root
+        and (bundled_root / "scripts" / "sa3_tflite.py").is_file()
+        and (bundled_root / "models" / "tokenizer.model").is_file()
     )
 
 
@@ -141,9 +150,9 @@ def run_tflite_generation(
     log_path = work_dir / "runtime.log"
     thread_count = threads or min(8, max(1, os.cpu_count() or 1))
     command = [
-        sys.executable,
-        "-m",
-        "vibeseq_inference.stable_audio_tflite_worker",
+        *isolated_worker_command(
+            "stable-audio-tflite", "vibeseq_inference.stable_audio_tflite_worker"
+        ),
         "--runtime-root",
         str(root),
         "--prompt",

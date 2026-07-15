@@ -15,10 +15,11 @@ from pathlib import Path
 from typing import Any
 
 from huggingface_hub import hf_hub_download
-from platformdirs import user_cache_path
 
 from .model_manifest import STABLE_AUDIO_3_MEDIUM_OPTIMIZED
 from .security import safe_error_message
+from .storage_paths import model_runtime_dir
+from .worker_process import isolated_worker_command
 
 
 _SOURCE_URL = "https://github.com/Stability-AI/stable-audio-3.git"
@@ -44,12 +45,7 @@ def runtime_checkout() -> Path:
     revision = STABLE_AUDIO_3_MEDIUM_OPTIMIZED.code_revision
     if revision is None:
         raise RuntimeError("Stable Audio MLX code revision is not pinned.")
-    return (
-        Path(user_cache_path("VibeSeq", appauthor=False))
-        / "model-runtimes"
-        / "stable-audio-3"
-        / revision
-    )
+    return model_runtime_dir() / "stable-audio-3" / revision
 
 
 def runtime_root() -> Path:
@@ -59,22 +55,43 @@ def runtime_root() -> Path:
 def source_checkout_cached() -> bool:
     """Return whether the shared upstream checkout is the exact pinned source."""
 
-    checkout = runtime_checkout()
-    marker = checkout / _SOURCE_MARKER
+    return _source_tree_valid(runtime_checkout())
+
+
+def _source_tree_valid(root: Path) -> bool:
+    marker = root / _SOURCE_MARKER
     try:
         value = json.loads(marker.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return False
     return bool(
-        (checkout / ".git").is_dir()
-        and value.get("repository") == _SOURCE_URL
+        value.get("repository") == _SOURCE_URL
         and value.get("revision") == STABLE_AUDIO_3_MEDIUM_OPTIMIZED.code_revision
+        and (root / "optimized" / "mlx" / "scripts" / "sa3_mlx.py").is_file()
+        and (root / "optimized" / "tflite" / "scripts" / "sa3_tflite.py").is_file()
     )
 
 
+def _bundled_source() -> Path | None:
+    frozen_root = getattr(sys, "_MEIPASS", None)
+    if not frozen_root:
+        return None
+    candidate = Path(frozen_root) / "stable-audio-3-runtime"
+    return candidate if candidate.is_dir() else None
+
+
+def bundled_runtime_checkout() -> Path | None:
+    bundled = _bundled_source()
+    return bundled if bundled is not None and _source_tree_valid(bundled) else None
+
+
 def mlx_code_cached() -> bool:
-    entrypoint = runtime_root() / "scripts" / "sa3_mlx.py"
-    return source_checkout_cached() and entrypoint.is_file()
+    if source_checkout_cached():
+        return (runtime_root() / "scripts" / "sa3_mlx.py").is_file()
+    bundled = bundled_runtime_checkout()
+    return bool(
+        bundled and (bundled / "optimized" / "mlx" / "scripts" / "sa3_mlx.py").is_file()
+    )
 
 
 def _run_checked(command: list[str], *, cwd: Path | None = None) -> str:
@@ -107,6 +124,15 @@ def _install_exact_source() -> None:
     temporary = checkout.with_name(f".{checkout.name}.{uuid.uuid4().hex}.tmp")
     shutil.rmtree(temporary, ignore_errors=True)
     try:
+        bundled = _bundled_source()
+        if bundled is not None:
+            shutil.copytree(bundled, temporary)
+            if checkout.exists():
+                shutil.rmtree(checkout)
+            os.replace(temporary, checkout)
+            if source_checkout_cached():
+                return
+            raise RuntimeError("Bundled Stable Audio 3 runtime source is invalid.")
         _run_checked(
             [
                 "git",
@@ -213,9 +239,9 @@ def run_mlx_generation(
     metadata_path = work_dir / "result.json"
     log_path = work_dir / "runtime.log"
     command = [
-        sys.executable,
-        "-m",
-        "vibeseq_inference.stable_audio_mlx_worker",
+        *isolated_worker_command(
+            "stable-audio-mlx", "vibeseq_inference.stable_audio_mlx_worker"
+        ),
         "--runtime-root",
         str(root),
         "--prompt",

@@ -66,11 +66,11 @@ jobs:
       - name: Write release scope
         run: |
           cat > "${RUNNER_TEMP}/release-notes.md" <<'EOF'
-          ## Desktop shell validation prerelease
+          ## Desktop runtime validation prerelease
 
-          This unsigned prerelease is for clean-machine validation of the VibeSeq desktop shell, local persistence, arrangement editing, playback, and export.
+          This unsigned prerelease is for clean-machine validation of the VibeSeq desktop runtime, local persistence, arrangement editing, playback, and export.
 
-          It embeds the Studio and lightweight local inference sidecar, so Node.js, Python, and `uv` are not required. Stable Audio 3 Medium and MuScriptor Medium weights and heavyweight model runtimes are intentionally not included; the bundled demo providers are labelled as fixtures. Real-model validation remains a separate model-pack milestone.
+          It embeds the Studio, Stable Audio 3 execution source, and the frozen real-model runtime, so Node.js, Python, and `uv` are not required. Multi-gigabyte Stable Audio 3 Medium and MuScriptor Medium weights remain in the portable `VibeSeq Data` model cache and are not attached to this GitHub release asset.
 
           Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. Verify the downloaded asset with `SHA256SUMS.txt` before running it.
           EOF

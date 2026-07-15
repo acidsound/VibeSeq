@@ -5,8 +5,10 @@ npmRebuild: false
 compression: maximum
 directories:
   output: release
+  buildResources: build
 files:
   - desktop/main.cjs
+  - desktop/storage-root.cjs
 extraResources:
   - from: dist
     to: studio
@@ -17,6 +19,7 @@ extraResources:
     filter:
       - "**/*"
 mac:
+  icon: build/icon.icns
   category: public.app-category.music
   target:
     - target: dmg
@@ -28,6 +31,7 @@ mac:
   artifactName: "${productName}-${version}-macOS-${arch}.${ext}"
   identity: null
 win:
+  icon: build/icon.ico
   target:
     - target: portable
       arch:

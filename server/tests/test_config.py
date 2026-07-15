@@ -38,3 +38,13 @@ def test_force_cpu_is_loaded_from_env_and_restricted_to_local(
 
     with pytest.raises(ValueError, match="supported only.*TARGET=local"):
         Settings(data_dir=tmp_path, target="colab-t4", force_cpu=True).validate()
+
+
+def test_vibeseq_home_owns_default_inference_storage(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root = tmp_path / "VibeSeq Data"
+    monkeypatch.setenv("VIBESEQ_HOME", str(root))
+    monkeypatch.delenv("VIBESEQ_DATA_DIR", raising=False)
+
+    assert Settings.from_env().data_dir == root / "inference"

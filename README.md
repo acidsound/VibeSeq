@@ -166,11 +166,27 @@ and unsigned Apple Silicon macOS packages through GitHub Actions. These packages
 embed the Studio and lightweight local inference sidecar, so the target machine
 does not need Node.js, Python, `uv`, or a separate web server.
 
-The first desktop prerelease is a shell and workflow validation target. Stable
-Audio 3 Medium and MuScriptor Medium weights and heavyweight model runtimes are
-not embedded; those remain a separate model-pack boundary. See
-`docs/product/desktop-release.md` for artifact names, security boundaries,
-unsigned-build warnings, and the clean-Windows acceptance checklist.
+The desktop sidecar includes the real Stable Audio 3 MLX runtime, MuScriptor,
+PyTorch, and their pinned execution code. Standard GitHub assets keep the large
+model weights in the `VibeSeq Data` model cache. For an offline Apple Silicon
+demo build with the exact medium weights inside the application, populate the
+Hugging Face cache once and run:
+
+```sh
+npm run desktop:pack
+npm run desktop:bundle-models:mac -- release/mac-arm64/VibeSeq.app
+```
+
+That local `.app` needs no Hugging Face account, token, network connection,
+Python, Node.js, or `uv`. See `docs/product/desktop-release.md` for artifact
+names, security boundaries, unsigned-build warnings, and the clean-Windows
+acceptance checklist.
+
+Windows portable builds store their durable `VibeSeq Data` directory beside
+the distributed executable. macOS builds default to `~/VibeSeq Data` because a
+signed `.app` bundle must remain immutable. Set `VIBESEQ_HOME` before launch to
+place the complete profile, model, runtime, project, Library, and inference
+tree on another volume.
 
 ## Colab T4 target
 

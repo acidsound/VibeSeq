@@ -4,9 +4,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from platformdirs import user_data_path
-
-
 GENERATION_PROVIDERS = frozenset({"procedural-demo", "stable-audio-3"})
 TRANSCRIPTION_PROVIDERS = frozenset({"signal-demo", "muscriptor"})
 
@@ -85,12 +82,9 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
-        configured_data_dir = os.getenv("VIBESEQ_DATA_DIR")
-        data_dir = (
-            Path(configured_data_dir).expanduser()
-            if configured_data_dir
-            else Path(user_data_path("VibeSeq", appauthor=False)) / "inference"
-        )
+        from .storage_paths import inference_data_dir
+
+        data_dir = inference_data_dir()
         studio_dist = os.getenv("VIBESEQ_STUDIO_DIST")
         origins = tuple(
             item.strip()

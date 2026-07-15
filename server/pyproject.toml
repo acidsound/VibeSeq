@@ -9,6 +9,7 @@ description = "Local-first inference service for VibeSeq"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.116,<1",
+  "huggingface-hub>=0.34,<2",
   "numpy>=2.2.6,<3",
   "platformdirs>=4.3,<5",
   "python-multipart>=0.0.20,<1",

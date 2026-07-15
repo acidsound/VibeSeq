@@ -623,8 +623,8 @@ def test_stable_audio_resolver_pins_checkpoint_and_text_encoder(
 
     monkeypatch.setattr("huggingface_hub.hf_hub_download", pinned_download)
     monkeypatch.setattr(
-        "vibeseq_inference.providers.stable_audio.user_cache_path",
-        lambda *_, **__: tmp_path / "cache",
+        "vibeseq_inference.providers.stable_audio.model_config_dir",
+        lambda: tmp_path / "cache" / "model-configs",
     )
     config_path, checkpoint_path = _pinned_stable_audio_files()
     config = json.loads(Path(config_path).read_text())

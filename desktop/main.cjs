@@ -3,6 +3,11 @@ const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const net = require('node:net')
 const path = require('node:path')
+const {
+  configureElectronStorage,
+  resolveStorageRoot,
+  sidecarStorageEnvironment,
+} = require('./storage-root.cjs')
 
 const LOOPBACK_HOST = '127.0.0.1'
 const STARTUP_TIMEOUT_MS = 30_000
@@ -11,6 +16,9 @@ let mainWindow = null
 let sidecar = null
 let sidecarLog = null
 let quitting = false
+
+const storageRoot = resolveStorageRoot({ isPackaged: app.isPackaged })
+configureElectronStorage(app, storageRoot)
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
@@ -30,6 +38,18 @@ const reservePort = () => new Promise((resolve, reject) => {
 })
 
 const packagedResource = (name) => path.join(process.resourcesPath, name)
+
+const bundledModelHub = () => {
+  if (!app.isPackaged) return null
+  const hub = packagedResource(path.join('models', 'huggingface', 'hub'))
+  const requiredRepositories = [
+    'models--stabilityai--stable-audio-3-optimized',
+    'models--MuScriptor--muscriptor-medium',
+  ]
+  return requiredRepositories.every((repository) => fs.existsSync(path.join(hub, repository)))
+    ? hub
+    : null
+}
 
 const sidecarExecutable = () => {
   const executable = process.platform === 'win32' ? 'vibeseq-inference.exe' : 'vibeseq-inference'
@@ -82,6 +102,8 @@ const launchSidecar = async () => {
   fs.mkdirSync(app.getPath('logs'), { recursive: true })
   sidecarLog = fs.createWriteStream(path.join(app.getPath('logs'), 'vibeseq-desktop.log'), { flags: 'a' })
   appendDesktopLog(`starting ${app.getVersion()} on ${process.platform}/${process.arch}`)
+  const modelHub = bundledModelHub()
+  appendDesktopLog(modelHub ? 'using bundled offline model cache' : 'using data-root model cache')
 
   sidecar = spawn(executable, [], {
     env: {
@@ -89,8 +111,10 @@ const launchSidecar = async () => {
       VIBESEQ_HOST: LOOPBACK_HOST,
       VIBESEQ_PORT: String(port),
       VIBESEQ_STUDIO_DIST: studio,
-      VIBESEQ_DATA_DIR: path.join(app.getPath('userData'), 'inference'),
       VIBESEQ_TARGET: 'local',
+      VIBESEQ_GENERATION_PROVIDER: process.env.VIBESEQ_GENERATION_PROVIDER || 'stable-audio-3',
+      VIBESEQ_TRANSCRIPTION_PROVIDER: process.env.VIBESEQ_TRANSCRIPTION_PROVIDER || 'muscriptor',
+      ...sidecarStorageEnvironment(storageRoot, { bundledModelHub: modelHub }),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,

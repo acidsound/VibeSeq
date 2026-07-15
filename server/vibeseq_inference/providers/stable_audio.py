@@ -8,7 +8,6 @@ from importlib.util import find_spec
 from pathlib import Path
 
 import numpy as np
-from platformdirs import user_cache_path
 
 from ..audio import peak_envelope, read_wave, write_pcm16_wave
 from ..devices import RuntimeRoute, stable_audio_execution_routes
@@ -17,6 +16,7 @@ from ..models import GenerateRequest
 from ..security import safe_error_message
 from ..stable_audio_mlx import run_mlx_generation
 from ..stable_audio_tflite import run_tflite_generation
+from ..storage_paths import model_config_dir
 from .base import (
     GenerationArtifact,
     JobCancelled,
@@ -60,7 +60,7 @@ def _pinned_stable_audio_files() -> tuple[str, str]:
             config.pop("repo_id", None)
             config.pop("subfolder", None)
 
-    cache_dir = Path(user_cache_path("VibeSeq", appauthor=False)) / "model-configs"
+    cache_dir = model_config_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
     pinned_config = cache_dir / (
         f"stable-audio-3-medium-{artifact.model_revision}-v1.json"
