@@ -25,6 +25,7 @@ from .readiness import (
     transcription_capability,
 )
 from .storage import Storage
+from .storage_paths import model_cache_dir, vibeseq_home
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -64,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health() -> HealthResponse:
         hardware = HardwareProbe.detect()
         devices = available_devices(hardware, force_cpu=config.force_cpu)
+        storage_root = vibeseq_home() or config.data_dir.parent
         return HealthResponse(
             version=__version__,
             target=config.target,
@@ -87,6 +89,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "transcription": sorted(TRANSCRIPTION_PROVIDERS),
             },
             model_manifest=manifest_health(),
+            storage={
+                "root": str(storage_root),
+                "modelCache": str(model_cache_dir()),
+            },
         )
 
     @application.post(

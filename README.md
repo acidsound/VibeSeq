@@ -167,20 +167,18 @@ embed the Studio and lightweight local inference sidecar, so the target machine
 does not need Node.js, Python, `uv`, or a separate web server.
 
 The desktop sidecar includes the real Stable Audio 3 MLX runtime, MuScriptor,
-PyTorch, and their pinned execution code. Standard GitHub assets keep the large
-model weights in the `VibeSeq Data` model cache. For an offline Apple Silicon
-demo build with the exact medium weights inside the application, populate the
-Hugging Face cache once and run:
+PyTorch, and their pinned execution code, but no model weights. The Inference
+readiness panel lists the official repository, exact revision, required files,
+and the model-cache path reported by the running package.
 
-```sh
-npm run desktop:pack
-npm run desktop:bundle-models:mac -- release/mac-arm64/VibeSeq.app
-```
+- Stable Audio 3 Medium optimized:
+  <https://huggingface.co/stabilityai/stable-audio-3-optimized>
+- MuScriptor Medium:
+  <https://huggingface.co/MuScriptor/muscriptor-medium>
 
-That local `.app` needs no Hugging Face account, token, network connection,
-Python, Node.js, or `uv`. See `docs/product/desktop-release.md` for artifact
-names, security boundaries, unsigned-build warnings, and the clean-Windows
-acceptance checklist.
+See `docs/product/desktop-release.md` for artifact names, model paths,
+security boundaries, unsigned-build warnings, and the clean-Windows acceptance
+checklist.
 
 Windows portable builds store their durable `VibeSeq Data` directory beside
 the distributed executable. macOS builds default to `~/VibeSeq Data` because a

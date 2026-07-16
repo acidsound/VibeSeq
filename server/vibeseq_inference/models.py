@@ -74,3 +74,4 @@ class HealthResponse(ApiModel):
     transcription: dict[str, Any]
     selectable_providers: dict[str, list[str]]
     model_manifest: dict[str, dict[str, Any]]
+    storage: dict[str, str]

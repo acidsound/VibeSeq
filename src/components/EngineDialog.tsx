@@ -19,6 +19,7 @@ type EngineCapabilityCardProps = {
   selectedProvider: string
   options: string[]
   onProvider: (value: string) => void
+  modelCachePath?: string
 }
 
 const optionLabel = (provider: string): string => {
@@ -51,6 +52,7 @@ function EngineCapabilityCard({
   selectedProvider,
   options,
   onProvider,
+  modelCachePath,
 }: EngineCapabilityCardProps) {
   const presentation = presentEngine(health, kind, selectedProvider)
   const capability = capabilityFor(health, kind, selectedProvider)
@@ -97,9 +99,9 @@ function EngineCapabilityCard({
         <div className="engine-actions" role="note" aria-label={`${title} required actions`}>
           <b>REQUIRED</b>
           <ul>{presentation.actions.map((action) => <li key={action}>{action}</li>)}</ul>
-          {presentation.accessUrl && capability?.gated && capability.accessGranted !== true && (
+          {presentation.accessUrl && capability?.weightsCached === false && (
             <a href={presentation.accessUrl} target="_blank" rel="noreferrer">
-              Open model access page <ExternalLink />
+              {capability.gated ? 'Open model access page' : 'Open official model files'} <ExternalLink />
             </a>
           )}
           {sourceUrl && capability?.codeCached !== true && (
@@ -107,6 +109,23 @@ function EngineCapabilityCard({
               Open exact source revision <ExternalLink />
             </a>
           )}
+        </div>
+      )}
+
+      {capability?.weightsCached === false && capability.bootstrap && (
+        <div className="engine-model-install" role="note" aria-label={`${title} model installation`}>
+          <b>MODEL INSTALL</b>
+          <dl>
+            <div><dt>FROM</dt><dd>{capability.bootstrap.modelId}@{capability.bootstrap.revision}</dd></div>
+            <div><dt>SAVE CACHE UNDER</dt><dd>{modelCachePath || 'Model cache path not reported'}</dd></div>
+          </dl>
+          <span>Required files</span>
+          <ul>
+            {(capability.bootstrap.files ?? capability.missingFiles ?? []).map((file) => (
+              <li key={file}>{file}</li>
+            ))}
+          </ul>
+          <small>Keep the Hugging Face repository cache layout intact. Restart VibeSeq after the exact revision is installed.</small>
         </div>
       )}
 
@@ -163,6 +182,7 @@ export function EngineDialog({
             selectedProvider={generationProvider}
             options={generationOptions}
             onProvider={onGenerationProvider}
+            modelCachePath={health?.storage?.modelCache}
           />
           <EngineCapabilityCard
             title="MIDI extraction"
@@ -171,6 +191,7 @@ export function EngineDialog({
             selectedProvider={transcriptionProvider}
             options={transcriptionOptions}
             onProvider={onTranscriptionProvider}
+            modelCachePath={health?.storage?.modelCache}
           />
         </div>
 

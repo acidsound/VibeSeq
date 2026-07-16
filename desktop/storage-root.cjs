@@ -56,15 +56,14 @@ const configureElectronStorage = (electronApp, root) => {
   electronApp.setPath('logs', path.join(root, 'logs'))
 }
 
-const sidecarStorageEnvironment = (root, { bundledModelHub = null } = {}) => {
+const sidecarStorageEnvironment = (root) => {
   const huggingFaceHome = path.join(root, 'models', 'huggingface')
   return {
     VIBESEQ_HOME: root,
     VIBESEQ_DATA_DIR: path.join(root, 'inference'),
     VIBESEQ_RUNTIME_DIR: path.join(root, 'runtimes'),
     HF_HOME: huggingFaceHome,
-    HUGGINGFACE_HUB_CACHE: bundledModelHub || path.join(huggingFaceHome, 'hub'),
-    ...(bundledModelHub ? { HF_HUB_OFFLINE: '1' } : {}),
+    HUGGINGFACE_HUB_CACHE: path.join(huggingFaceHome, 'hub'),
     XDG_CACHE_HOME: path.join(root, 'cache'),
   }
 }

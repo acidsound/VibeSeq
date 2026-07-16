@@ -41,6 +41,7 @@ jobs:
       - run: npm run desktop:package
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - run: npm run desktop:assert-model-free
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -70,7 +71,14 @@ jobs:
 
           This unsigned prerelease is for clean-machine validation of the VibeSeq desktop runtime, local persistence, arrangement editing, playback, and export.
 
-          It embeds the Studio, Stable Audio 3 execution source, and the frozen real-model runtime, so Node.js, Python, and `uv` are not required. Multi-gigabyte Stable Audio 3 Medium and MuScriptor Medium weights remain in the portable `VibeSeq Data` model cache and are not attached to this GitHub release asset.
+          It embeds the Studio, Stable Audio 3 execution source, and the frozen real-model runtime, so Node.js, Python, and `uv` are not required. Model weights are not included.
+
+          Install the exact model revisions shown by VibeSeq's Inference readiness panel from the official repositories:
+
+          - Stable Audio 3 Medium optimized: https://huggingface.co/stabilityai/stable-audio-3-optimized
+          - MuScriptor Medium: https://huggingface.co/MuScriptor/muscriptor-medium
+
+          VibeSeq displays the required files and exact cache path. macOS stores them below `~/VibeSeq Data/models`; the Windows portable build stores them below `VibeSeq Data/models` beside `VibeSeq.exe`.
 
           Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. Verify the downloaded asset with `SHA256SUMS.txt` before running it.
           EOF

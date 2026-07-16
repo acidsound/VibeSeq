@@ -50,7 +50,10 @@ def tone_wav(frequency: float = 440, duration: float = 1.0) -> bytes:
     return output.getvalue()
 
 
-def test_health_discloses_real_and_demo_providers(tmp_path: Path) -> None:
+def test_health_discloses_real_and_demo_providers(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("VIBESEQ_HOME", str(tmp_path))
     with TestClient(create_app(settings(tmp_path))) as client:
         response = client.get("/api/health")
         assert response.status_code == 200
@@ -74,6 +77,10 @@ def test_health_discloses_real_and_demo_providers(tmp_path: Path) -> None:
             "signal-demo",
         ]
         assert body["hardware"]["devices"][-1] == "cpu"
+        assert body["storage"]["root"] == str(tmp_path)
+        assert body["storage"]["modelCache"].endswith(
+            "models/huggingface/hub"
+        )
 
 
 def test_force_cpu_health_keeps_machine_facts_but_selects_cpu_only(

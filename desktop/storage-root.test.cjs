@@ -60,24 +60,3 @@ test('storage root creates every durable data directory', () => {
     fs.rmSync(temporary, { recursive: true, force: true })
   }
 })
-
-test('sidecar environment can use a read-only bundled model cache', () => {
-  const root = path.join(path.parse(process.cwd()).root, 'data', 'VibeSeq Data')
-  const bundledModelHub = path.join(
-    path.parse(process.cwd()).root,
-    'Applications',
-    'VibeSeq.app',
-    'Contents',
-    'Resources',
-    'models',
-    'huggingface',
-    'hub',
-  )
-  const environment = sidecarStorageEnvironment(root, {
-    bundledModelHub,
-  })
-
-  assert.equal(environment.HUGGINGFACE_HUB_CACHE, bundledModelHub)
-  assert.equal(environment.HF_HUB_OFFLINE, '1')
-  assert.equal(environment.HF_HOME, path.join(root, 'models', 'huggingface'))
-})

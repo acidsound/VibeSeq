@@ -31,31 +31,30 @@ The root contains `models`, `runtimes`, `projects`, `library`, `inference`,
 model downloads, inference artifacts, and runtime caches therefore move as one
 unit. The macOS application bundle itself is never modified.
 
-## Model runtime and offline demo build
+## Model installation
 
 The desktop sidecar freezes the real medium-model dependencies and pinned
 Stable Audio execution source. It defaults to Stable Audio 3 Medium and
 MuScriptor Medium; demo providers are never substituted silently.
 
-Standard GitHub assets do not embed the multi-gigabyte weights. They resolve
-exact revisions from the `VibeSeq Data/models` cache. For an offline Apple
-Silicon demonstration build, first ensure both exact model snapshots exist in
-the local Hugging Face cache, then run:
+Desktop packages never embed model weights. The Inference readiness panel
+reports the exact revision, required files, official repository, and effective
+cache path for each missing model.
 
-```sh
-npm run desktop:pack
-npm run desktop:bundle-models:mac -- release/mac-arm64/VibeSeq.app
-```
+- Stable Audio 3 Medium optimized:
+  <https://huggingface.co/stabilityai/stable-audio-3-optimized>
+- MuScriptor Medium:
+  <https://huggingface.co/MuScriptor/muscriptor-medium>
 
-The second command APFS-clones only the required Stable Audio MLX and
-MuScriptor files into the unsigned application bundle. At launch VibeSeq
-detects both repositories, switches Hugging Face into offline mode, and reads
-the bundled cache. Mutable projects, Library assets, inference output, logs,
-and the Electron profile still remain under `~/VibeSeq Data`.
+Keep the Hugging Face repository cache layout intact beneath the path shown by
+the application. The default cache roots are:
 
-The model-bundled `.app` is about 7 GB and is intended for local demonstration
-and clean-machine transfer outside GitHub's normal release-asset path. Perform
-model injection before code signing in a signed distribution workflow.
+- macOS: `~/VibeSeq Data/models/huggingface/hub`
+- Windows portable: `VibeSeq Data/models/huggingface/hub` beside
+  `VibeSeq.exe`
+
+MuScriptor remains gated. Each user must obtain access from its official model
+page; VibeSeq does not redistribute or bypass gated weights.
 
 The builds are unsigned. Windows SmartScreen and macOS Gatekeeper may warn until
 code-signing identities are configured. Do not describe an unsigned prerelease

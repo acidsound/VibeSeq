@@ -31,6 +31,19 @@ def model_runtime_dir() -> Path:
     return Path(user_cache_path("VibeSeq", appauthor=False)) / "model-runtimes"
 
 
+def model_cache_dir() -> Path:
+    configured = os.getenv("HUGGINGFACE_HUB_CACHE")
+    if configured:
+        return Path(configured).expanduser()
+    huggingface_home = os.getenv("HF_HOME")
+    if huggingface_home:
+        return Path(huggingface_home).expanduser() / "hub"
+    home = vibeseq_home()
+    if home is not None:
+        return home / "models" / "huggingface" / "hub"
+    return Path(user_cache_path("huggingface", appauthor=False)) / "hub"
+
+
 def model_config_dir() -> Path:
     home = vibeseq_home()
     if home is not None:

@@ -6,6 +6,10 @@ const mediumHealth = (): InferenceHealth => ({
   status: 'ok',
   target: 'local',
   hardware: { preferredDevice: 'metal', devices: ['metal', 'cpu'] },
+  storage: {
+    root: '/Users/artist/VibeSeq Data',
+    modelCache: '/Users/artist/VibeSeq Data/models/huggingface/hub',
+  },
   generation: {
     available: true,
     ready: true,

@@ -39,18 +39,6 @@ const reservePort = () => new Promise((resolve, reject) => {
 
 const packagedResource = (name) => path.join(process.resourcesPath, name)
 
-const bundledModelHub = () => {
-  if (!app.isPackaged) return null
-  const hub = packagedResource(path.join('models', 'huggingface', 'hub'))
-  const requiredRepositories = [
-    'models--stabilityai--stable-audio-3-optimized',
-    'models--MuScriptor--muscriptor-medium',
-  ]
-  return requiredRepositories.every((repository) => fs.existsSync(path.join(hub, repository)))
-    ? hub
-    : null
-}
-
 const sidecarExecutable = () => {
   const executable = process.platform === 'win32' ? 'vibeseq-inference.exe' : 'vibeseq-inference'
   if (app.isPackaged) return packagedResource(path.join('server', executable))
@@ -102,8 +90,7 @@ const launchSidecar = async () => {
   fs.mkdirSync(app.getPath('logs'), { recursive: true })
   sidecarLog = fs.createWriteStream(path.join(app.getPath('logs'), 'vibeseq-desktop.log'), { flags: 'a' })
   appendDesktopLog(`starting ${app.getVersion()} on ${process.platform}/${process.arch}`)
-  const modelHub = bundledModelHub()
-  appendDesktopLog(modelHub ? 'using bundled offline model cache' : 'using data-root model cache')
+  appendDesktopLog('using data-root model cache')
 
   sidecar = spawn(executable, [], {
     env: {
@@ -114,7 +101,7 @@ const launchSidecar = async () => {
       VIBESEQ_TARGET: 'local',
       VIBESEQ_GENERATION_PROVIDER: process.env.VIBESEQ_GENERATION_PROVIDER || 'stable-audio-3',
       VIBESEQ_TRANSCRIPTION_PROVIDER: process.env.VIBESEQ_TRANSCRIPTION_PROVIDER || 'muscriptor',
-      ...sidecarStorageEnvironment(storageRoot, { bundledModelHub: modelHub }),
+      ...sidecarStorageEnvironment(storageRoot),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,

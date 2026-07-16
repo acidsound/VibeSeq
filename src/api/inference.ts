@@ -60,6 +60,10 @@ export type InferenceHealth = {
     transcription?: string[]
   }
   modelManifest?: Record<string, ModelManifestEntry>
+  storage?: {
+    root?: string
+    modelCache?: string
+  }
 }
 
 export type GeneratedAssetResult = {
