@@ -8,11 +8,12 @@ import { Transport } from './Transport'
 
 const renderTransport = (onBpmChange = vi.fn()) => {
   const project = createBlankProject({ now: '2026-07-15T00:00:00.000Z' })
+  const onSnapGridChange = vi.fn()
   render(createElement(Transport, {
     project,
     playheadBeat: 0,
     playing: false,
-    snapping: true,
+    snapGrid: 'bar',
     canUndo: false,
     canRedo: false,
     health: null,
@@ -22,7 +23,7 @@ const renderTransport = (onBpmChange = vi.fn()) => {
     onStop: vi.fn(),
     onSeekStart: vi.fn(),
     onToggleLoop: vi.fn(),
-    onToggleSnap: vi.fn(),
+    onSnapGridChange,
     onUndo: vi.fn(),
     onRedo: vi.fn(),
     onBpmChange,
@@ -30,7 +31,7 @@ const renderTransport = (onBpmChange = vi.fn()) => {
     onOpenProject: vi.fn(),
     onOpenSettings: vi.fn(),
   }))
-  return { input: screen.getByRole('spinbutton', { name: 'Tempo' }), onBpmChange }
+  return { input: screen.getByRole('spinbutton', { name: 'Tempo' }), onBpmChange, onSnapGridChange }
 }
 
 afterEach(() => {
@@ -82,5 +83,18 @@ describe('Transport tempo commit behavior', () => {
 
     expect(onBpmChange).toHaveBeenCalledWith(240)
     expect((input as HTMLInputElement).value).toBe('120.0')
+  })
+})
+
+describe('Transport snap grid', () => {
+  it('exposes the full grid list with Bar selected by default', () => {
+    const { onSnapGridChange } = renderTransport()
+    const select = screen.getByRole('combobox', { name: 'Snap grid' }) as HTMLSelectElement
+
+    expect(select.value).toBe('bar')
+    expect([...select.options].map((option) => option.text)).toEqual(['Bar', '1/2', '1/4', '1/8', '1/16', 'Free'])
+
+    fireEvent.change(select, { target: { value: '1/8' } })
+    expect(onSnapGridChange).toHaveBeenCalledWith('1/8')
   })
 })

@@ -1,15 +1,18 @@
 const { app, BrowserWindow, dialog, session } = require('electron')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
-const net = require('node:net')
 const path = require('node:path')
+const {
+  LOOPBACK_HOST,
+  findAvailablePort,
+} = require('./port-selection.cjs')
 const {
   configureElectronStorage,
   resolveStorageRoot,
   sidecarStorageEnvironment,
 } = require('./storage-root.cjs')
 
-const LOOPBACK_HOST = '127.0.0.1'
+const ELECTRON_SERVER_START_PORT = 10_000
 const STARTUP_TIMEOUT_MS = 30_000
 
 let mainWindow = null
@@ -21,21 +24,6 @@ const storageRoot = resolveStorageRoot({ isPackaged: app.isPackaged })
 configureElectronStorage(app, storageRoot)
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
-
-const reservePort = () => new Promise((resolve, reject) => {
-  const server = net.createServer()
-  server.unref()
-  server.once('error', reject)
-  server.listen(0, LOOPBACK_HOST, () => {
-    const address = server.address()
-    const port = typeof address === 'object' && address ? address.port : null
-    server.close((error) => {
-      if (error) reject(error)
-      else if (port === null) reject(new Error('Could not reserve a loopback port.'))
-      else resolve(port)
-    })
-  })
-})
 
 const packagedResource = (name) => path.join(process.resourcesPath, name)
 
@@ -79,7 +67,7 @@ const waitForStudio = async (origin, processHandle) => {
 }
 
 const launchSidecar = async () => {
-  const port = await reservePort()
+  const port = await findAvailablePort(ELECTRON_SERVER_START_PORT)
   const origin = `http://${LOOPBACK_HOST}:${port}`
   const executable = sidecarExecutable()
   const studio = studioDirectory()
@@ -91,6 +79,7 @@ const launchSidecar = async () => {
   sidecarLog = fs.createWriteStream(path.join(app.getPath('logs'), 'vibeseq-desktop.log'), { flags: 'a' })
   appendDesktopLog(`starting ${app.getVersion()} on ${process.platform}/${process.arch}`)
   appendDesktopLog('using data-root model cache')
+  appendDesktopLog(`using local Studio/API origin ${origin}`)
 
   sidecar = spawn(executable, [], {
     env: {

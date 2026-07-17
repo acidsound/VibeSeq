@@ -22,6 +22,7 @@ type DetailEditorProps = {
   bpm: number
   timeSignature: TimeSignature
   snapping: boolean
+  snapDivision?: number
   open: boolean
   expanded: boolean
   onEditNote: (noteId: string, patch: Partial<MidiNote>) => void
@@ -240,6 +241,7 @@ export function DetailEditor({
   bpm,
   timeSignature,
   snapping,
+  snapDivision = 0.25,
   open,
   expanded,
   onEditNote,
@@ -285,6 +287,7 @@ export function DetailEditor({
           bpm={bpm}
           timeSignature={timeSignature}
           snapping={snapping}
+          snapDivision={snapDivision}
           onSeek={onSeek}
           onEditAudio={onEditAudio}
         />
@@ -296,6 +299,7 @@ export function DetailEditor({
           playheadBeat={playheadBeat}
           bpm={bpm}
           snapping={snapping}
+          snapDivision={snapDivision}
           onEditNote={onEditNote}
           onDeleteNote={onDeleteNote}
           onEditNotes={onEditNotes}
@@ -378,6 +382,7 @@ function AudioDetail({
   bpm,
   timeSignature,
   snapping,
+  snapDivision,
   onSeek,
   onEditAudio,
 }: {
@@ -387,6 +392,7 @@ function AudioDetail({
   bpm: number
   timeSignature: TimeSignature
   snapping: boolean
+  snapDivision: number
   onSeek?: DetailEditorProps['onSeek']
   onEditAudio?: DetailEditorProps['onEditAudio']
 }) {
@@ -497,7 +503,7 @@ function AudioDetail({
 
   const seekByKeyboard = (event: React.KeyboardEvent) => {
     let next: number | null = null
-    const step = snapping ? 0.25 : 0.05
+    const step = snapping ? snapDivision : 0.05
     if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next = playheadBeat - step
     if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next = playheadBeat + step
     if (event.key === 'Home') next = clip.startBeat
@@ -656,6 +662,7 @@ function MidiDetail({
   playheadBeat,
   bpm,
   snapping,
+  snapDivision,
   tool,
   onToolChange,
   onEditNote,
@@ -672,6 +679,7 @@ function MidiDetail({
   playheadBeat: number
   bpm: number
   snapping: boolean
+  snapDivision: number
   tool: MidiTool
   onToolChange: (tool: MidiTool) => void
   onEditNote: DetailEditorProps['onEditNote']
@@ -733,7 +741,7 @@ function MidiDetail({
   const auditionRouteKey = track
     ? `${track.id}:${track.midi.channel}:${JSON.stringify(track.midi.instrument)}`
     : 'no-midi-track'
-  const noteStep = snapping ? 0.25 : 0.05
+  const noteStep = snapping ? snapDivision : 0.05
 
   const replaceSelection = (ids: Iterable<string>, activeId?: string | null) => {
     const available = new Set(clip.notes.map((note) => note.id))
@@ -1054,7 +1062,7 @@ function MidiDetail({
         if (anchor) {
           const beatDelta = ((point.x - current.originX) / current.width) * clip.durationBeats
           const rawPlacement = clamp(current.anchorPlacementStartBeat + beatDelta, 0, Math.max(0, clip.durationBeats - current.anchorPlacementDurationBeats))
-          const desiredPlacement = snapping ? snapBeat(rawPlacement, '1/16') : rawPlacement
+          const desiredPlacement = snapping ? snapBeat(rawPlacement, snapDivision) : rawPlacement
           const mapped = sourceStartForPlacement(clip, anchor, current.anchorPlacementStartBeat, desiredPlacement)
           const pitchDelta = Math.round((current.originY - point.y) / PIANO_ROW_HEIGHT_PX)
           next = { ...current, moved, previewEdits: groupMoveEdits(current.selectedIds, mapped.sourceStartBeat - anchor.startBeat, pitchDelta) }
@@ -1064,7 +1072,7 @@ function MidiDetail({
         if (note) {
           const requested = note.durationBeats + ((point.x - current.originX) / current.width) * clip.durationBeats
           const maximum = Math.max(MIN_NOTE_BEATS, sourceWindow(clip).endBeat - note.startBeat)
-          const durationBeats = clamp(snapping ? Math.max(MIN_NOTE_BEATS, snapBeat(requested, '1/16')) : requested, MIN_NOTE_BEATS, maximum)
+          const durationBeats = clamp(snapping ? Math.max(MIN_NOTE_BEATS, snapBeat(requested, snapDivision)) : requested, MIN_NOTE_BEATS, maximum)
           next = { ...current, moved, previewEdits: [{ id: note.id, patch: { durationBeats } }] }
         }
       } else if (current.kind === 'marquee') {
@@ -1081,7 +1089,7 @@ function MidiDetail({
           sourceWindow(clip).endBeat - current.sourceStartBeat,
         ))
         const durationBeats = moved
-          ? clamp(snapping ? Math.max(MIN_NOTE_BEATS, snapBeat(rawDuration, '1/16')) : rawDuration, MIN_NOTE_BEATS, maximum)
+          ? clamp(snapping ? Math.max(MIN_NOTE_BEATS, snapBeat(rawDuration, snapDivision)) : rawDuration, MIN_NOTE_BEATS, maximum)
           : current.previewDurationBeats
         next = { ...current, moved, previewDurationBeats: durationBeats }
       } else if (current.kind === 'erase') {
@@ -1140,7 +1148,7 @@ function MidiDetail({
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onCancel)
     }
-  }, [interaction?.kind, interaction?.pointerId, clip, snapping, selectedNoteIds, onEditNotes, onDeleteNotes])
+  }, [interaction?.kind, interaction?.pointerId, clip, snapDivision, snapping, selectedNoteIds, onEditNotes, onDeleteNotes])
 
   const pointerOwner = (event: React.PointerEvent<HTMLElement>, bounds: DOMRect): PointerOwner => {
     capturePointer(event.currentTarget, event.pointerId)
@@ -1258,7 +1266,7 @@ function MidiDetail({
       return
     }
     const placementStartBeat = clamp(
-      snapping ? snapBeat((owner.originX / owner.width) * clip.durationBeats, '1/16') : (owner.originX / owner.width) * clip.durationBeats,
+      snapping ? snapBeat((owner.originX / owner.width) * clip.durationBeats, snapDivision) : (owner.originX / owner.width) * clip.durationBeats,
       0,
       Math.max(0, clip.durationBeats - MIN_NOTE_BEATS),
     )

@@ -5,6 +5,7 @@ import type { ArrangedMidiNote, ClipSourceSlice } from '../core'
 import type { AudioAsset, Clip, ClipSourceLoop, Project, Track, TrackKind } from '../types'
 import { findAsset, findClip, findClipCollision, findCompatibleTrackId, getArrangementTimelineBeats, MIN_TIMELINE_BARS, waveformPath } from '../ui/music'
 import { calculateCentroidScrollLeft, calculateScrollLeftForAnchor, clampTimelineZoom } from '../ui/timelineZoom'
+import { clearAudioSourceDrag, hasAudioSourceDrag, readAudioSourceDrag, type AudioSourceDragPayload } from '../ui/sourceDrag'
 import { AddTrackButtons } from './AddTrackButtons'
 
 type ClipEdit = { startBeat?: number; durationBeats?: number; offsetBeats?: number; sourceLoop?: ClipSourceLoop }
@@ -25,6 +26,7 @@ type ArrangementProps = {
   playheadBeat: number
   zoom: number
   snapping: boolean
+  snapDivision?: number
   trackLevels: Record<string, number>
   canUndo: boolean
   canRedo: boolean
@@ -44,6 +46,7 @@ type ArrangementProps = {
   onUndo: () => void
   onRedo: () => void
   onZoomChange: (zoom: number) => void
+  onDropAudioSource: (payload: AudioSourceDragPayload, trackId: string, startBeat: number) => void
 }
 
 type DragState = {
@@ -218,6 +221,7 @@ export function Arrangement({
   playheadBeat,
   zoom,
   snapping,
+  snapDivision = 0.25,
   trackLevels,
   canUndo,
   canRedo,
@@ -237,6 +241,7 @@ export function Arrangement({
   onUndo,
   onRedo,
   onZoomChange,
+  onDropAudioSource,
 }: ArrangementProps) {
   const timelineRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -388,7 +393,7 @@ export function Arrangement({
         const movement = current.mode === 'move' ? Math.hypot(deltaX, deltaY) : Math.abs(deltaX)
         const threshold = current.pointerType === 'touch' ? 6 : 3
         if (!current.hasMoved && movement < threshold) return current
-        const quantize = (value: number) => snapping ? snapBeat(value, '1/16') : value
+        const quantize = (value: number) => snapping ? snapBeat(value, snapDivision) : value
         let next: DragState
         if (current.mode === 'move') {
           const rows = [...document.querySelectorAll<HTMLElement>('.track-row[data-track-id]')]
@@ -534,7 +539,7 @@ export function Arrangement({
       window.removeEventListener('pointercancel', onCancel)
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [drag?.clipId, drag?.interactionId, drag?.mode, drag?.originX, drag?.originY, drag?.pointerId, drag?.width, onEditClip, onMoveClip, onOpenClipDetail, project.tracks, snapping, timelineBeats])
+  }, [drag?.clipId, drag?.interactionId, drag?.mode, drag?.originX, drag?.originY, drag?.pointerId, drag?.width, onEditClip, onMoveClip, onOpenClipDetail, project.tracks, snapDivision, snapping, timelineBeats])
 
   useEffect(() => {
     if (!loopDrag) return
@@ -544,7 +549,7 @@ export function Arrangement({
       setLoopDrag((current) => {
         if (!current) return current
         const rawDelta = ((event.clientX - current.originX) / current.width) * timelineBeats
-        const delta = snapping ? snapBeat(rawDelta, '1/16') : rawDelta
+        const delta = snapping ? snapBeat(rawDelta, snapDivision) : rawDelta
         let previewStart = current.startBeat
         let previewEnd = current.endBeat
         if (current.mode === 'start') previewStart = Math.max(0, Math.min(current.endBeat - 0.25, current.startBeat + delta))
@@ -577,7 +582,7 @@ export function Arrangement({
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', onCancel)
     return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onCancel) }
-  }, [loopDrag?.interactionId, loopDrag?.mode, loopDrag?.pointerId, onEditLoop, snapping, timelineBeats])
+  }, [loopDrag?.interactionId, loopDrag?.mode, loopDrag?.pointerId, onEditLoop, snapDivision, snapping, timelineBeats])
 
   const beginLoopDrag = (event: React.PointerEvent, mode: 'start' | 'end' | 'move') => {
     if (pinchRef.current) return
@@ -659,7 +664,7 @@ export function Arrangement({
     const bounds = timelineRef.current?.getBoundingClientRect()
     if (!bounds?.width) return
     const beat = Math.max(0, Math.min(timelineBeats, ((clientX - bounds.left) / bounds.width) * timelineBeats))
-    onSeek(snapping ? snapBeat(beat, '1/16') : beat)
+    onSeek(snapping ? snapBeat(beat, snapDivision) : beat)
   }
 
   const beginRulerScrub = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -691,7 +696,7 @@ export function Arrangement({
       window.removeEventListener('pointerup', finish)
       window.removeEventListener('pointercancel', finish)
     }
-  }, [onSeek, snapping, timelineBeats])
+  }, [onSeek, snapDivision, snapping, timelineBeats])
 
   const gestureGeometry = (centroidClientX: number) => {
     const scroll = scrollRef.current
@@ -824,7 +829,7 @@ export function Arrangement({
     event.preventDefault()
     event.stopPropagation()
     const direction = event.key === 'ArrowRight' ? 1 : -1
-    const delta = direction * (snapping ? 0.25 : 0.05)
+    const delta = direction * (snapping ? snapDivision : 0.05)
     const start = project.loop.startBeat
     const end = project.loop.endBeat
     if (mode === 'start') {
@@ -895,7 +900,7 @@ export function Arrangement({
               }}
               data-timeline-beats={timelineBeats}
             >
-              <div className="ruler-seek-control" onKeyDown={(event) => { const step = snapping ? 0.25 : 0.05; if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); onSeek(Math.max(0, Math.min(timelineBeats, playheadBeat + (event.key === 'ArrowRight' ? step : -step)))) } }} role="slider" tabIndex={0} aria-label="Arrangement playhead" aria-valuemin={0} aria-valuemax={timelineBeats} aria-valuenow={Number(playheadBeat.toFixed(3))} aria-valuetext={`${playheadBeat.toFixed(2)} beats`} />
+              <div className="ruler-seek-control" onKeyDown={(event) => { const step = snapping ? snapDivision : 0.05; if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); onSeek(Math.max(0, Math.min(timelineBeats, playheadBeat + (event.key === 'ArrowRight' ? step : -step)))) } }} role="slider" tabIndex={0} aria-label="Arrangement playhead" aria-valuemin={0} aria-valuemax={timelineBeats} aria-valuenow={Number(playheadBeat.toFixed(3))} aria-valuetext={`${playheadBeat.toFixed(2)} beats`} />
               {rulerMarks.map((beat, index) => <span key={beat} style={{ left: `${(beat / timelineBeats) * 100}%` }}>{index + 1}</span>)}
               {project.loop.enabled && (() => {
                 const startBeat = loopDrag?.previewStart ?? project.loop.startBeat
@@ -924,6 +929,7 @@ export function Arrangement({
                 selectedClipId={selectedClipId}
                 selectedTrack={selected ? selected.track.id === track.id : selectedTrackId === track.id}
                 snapping={snapping}
+                snapDivision={snapDivision}
                 level={trackLevels[track.id] ?? 0}
                 drag={drag}
                 onSelectTrack={onSelectTrack}
@@ -936,6 +942,7 @@ export function Arrangement({
                 onToggleTrack={onToggleTrack}
                 onTrackGain={onTrackGain}
                 onMoveTrack={onMoveTrack}
+                onDropAudioSource={onDropAudioSource}
               />
             ))}
             {project.tracks.length > 0 && <div className="playhead" style={{ '--playhead': Math.min(timelineBeats, playheadBeat) / timelineBeats } as React.CSSProperties} aria-hidden="true"><i /></div>}
@@ -955,6 +962,7 @@ type TrackRowProps = {
   selectedClipId: string | null
   selectedTrack: boolean
   snapping: boolean
+  snapDivision: number
   level: number
   drag: DragState | null
   onSelectTrack: (trackId: string) => void
@@ -967,6 +975,7 @@ type TrackRowProps = {
   onToggleTrack: (trackId: string, field: 'mute' | 'solo') => void
   onTrackGain: (trackId: string, gain: number) => void
   onMoveTrack: (trackId: string, direction: 'up' | 'down') => void
+  onDropAudioSource: (payload: AudioSourceDragPayload, trackId: string, startBeat: number) => void
 }
 
 function TrackRow({
@@ -978,6 +987,7 @@ function TrackRow({
   selectedClipId,
   selectedTrack,
   snapping,
+  snapDivision,
   level,
   drag,
   onSelectTrack,
@@ -990,7 +1000,9 @@ function TrackRow({
   onToggleTrack,
   onTrackGain,
   onMoveTrack,
+  onDropAudioSource,
 }: TrackRowProps) {
+  const [sourceDrop, setSourceDrop] = useState<{ startBeat: number; durationBeats: number; status: 'valid' | 'invalid' | 'collision' } | null>(null)
   const [minPitch, maxPitch] = useMemo(() => {
     let minimum = 127
     let maximum = 0
@@ -1023,12 +1035,36 @@ function TrackRow({
         ? `OCCUPIED · MOVE BLOCKED`
         : drag.dropStatus === 'source' ? `MOVE WITHIN ${track.name}` : `MOVE TO ${track.name}`
     : undefined
+  const sourceDropLabel = sourceDrop
+    ? sourceDrop.status === 'invalid'
+      ? 'AUDIO SOURCE · MIDI TRACK NOT ALLOWED'
+      : sourceDrop.status === 'collision'
+        ? 'OCCUPIED · PLACE BLOCKED'
+        : `COPY TO ${track.name} · BEAT ${sourceDrop.startBeat.toFixed(2)}`
+    : undefined
+  const updateSourceDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasAudioSourceDrag(event.dataTransfer)) return
+    event.preventDefault()
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const payload = readAudioSourceDrag(event.dataTransfer)
+    const sourceLeft = event.clientX - (payload?.grabOffsetX ?? 0)
+    const ratio = bounds.width > 0 ? (sourceLeft - bounds.left) / bounds.width : 0
+    const rawStartBeat = Math.max(0, Math.min(timelineBeats, ratio * timelineBeats))
+    const startBeat = snapping ? snapBeat(rawStartBeat, snapDivision) : rawStartBeat
+    const status = !payload || track.kind !== 'audio'
+      ? 'invalid'
+      : findClipCollision(track, '__source-drop__', startBeat, payload.durationBeats)
+        ? 'collision'
+        : 'valid'
+    event.dataTransfer.dropEffect = status === 'valid' ? 'copy' : 'none'
+    setSourceDrop({ startBeat, durationBeats: payload?.durationBeats ?? 0, status })
+  }
   const editTrimFromKeyboard = (event: React.KeyboardEvent, clip: Clip, edge: 'start' | 'end') => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     event.preventDefault()
     event.stopPropagation()
     const direction = event.key === 'ArrowRight' ? 1 : -1
-    const step = snapping ? 0.25 : 0.05
+    const step = snapping ? snapDivision : 0.05
     if (edge === 'end') {
       if (clip.sourceLoop) {
         const asset = findAsset(project, clip.assetId)
@@ -1077,11 +1113,37 @@ function TrackRow({
         </div>
       </div>
       <div
-        className={`track-lane timeline-grid ${activeTrackDrop ? drag.dropStatus === 'invalid' || drag.dropStatus === 'collision' ? 'is-invalid-drop-target' : 'is-valid-drop-target' : ''}`}
+        className={`track-lane timeline-grid ${activeTrackDrop ? drag.dropStatus === 'invalid' || drag.dropStatus === 'collision' ? 'is-invalid-drop-target' : 'is-valid-drop-target' : sourceDrop?.status === 'invalid' ? 'is-invalid-drop-target' : sourceDrop ? 'has-source-drop-preview' : ''}`}
         onClick={(event) => { if (event.target === event.currentTarget) onSelectTrack(track.id) }}
+        onDragEnter={updateSourceDrop}
+        onDragOver={updateSourceDrop}
+        onDragLeave={(event) => {
+          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+          setSourceDrop(null)
+        }}
+        onDrop={(event) => {
+          if (!hasAudioSourceDrag(event.dataTransfer)) return
+          event.preventDefault()
+          const payload = readAudioSourceDrag(event.dataTransfer)
+          const placement = sourceDrop
+          clearAudioSourceDrag()
+          setSourceDrop(null)
+          if (payload && placement?.status === 'valid') onDropAudioSource(payload, track.id, placement.startBeat)
+        }}
         aria-label={`${track.name} timeline lane`}
-        data-drop-label={dropLabel}
+        data-drop-label={sourceDropLabel ?? dropLabel}
       >
+        {sourceDrop && sourceDrop.status !== 'invalid' && sourceDrop.durationBeats > 0 && (
+          <div
+            className={`source-drop-preview is-${sourceDrop.status}`}
+            style={{
+              left: `${(sourceDrop.startBeat / timelineBeats) * 100}%`,
+              width: `${(sourceDrop.durationBeats / timelineBeats) * 100}%`,
+            }}
+            data-drop-label={sourceDropLabel}
+            aria-hidden="true"
+          />
+        )}
         {track.clips.map((clip) => {
           const activeDrag = drag?.clipId === clip.id ? drag : null
           const start = activeDrag?.previewStart ?? clip.startBeat
@@ -1148,7 +1210,7 @@ function TrackRow({
                   }
                   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
                     event.preventDefault()
-                    const step = snapping ? 0.25 : 0.05
+                    const step = snapping ? snapDivision : 0.05
                     onEditClip(track.id, clip.id, { startBeat: Math.max(0, clip.startBeat + (event.key === 'ArrowRight' ? step : -step)) })
                   }
                 }}

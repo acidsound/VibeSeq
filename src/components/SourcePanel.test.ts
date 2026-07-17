@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { createElement } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AUDIO_SOURCE_DRAG_TYPE } from '../ui/sourceDrag'
 import { SourcePanel } from './SourcePanel'
 
 afterEach(cleanup)
@@ -94,6 +95,61 @@ describe('SourcePanel audio import', () => {
     const visual = preview.querySelector('.candidate-waveform-visual')
     expect(visual).toBeTruthy()
     expect(visual?.querySelector('svg')).toBeTruthy()
+  })
+})
+
+describe('SourcePanel Arrangement placement', () => {
+  const candidate = {
+    id: 'candidate-drag',
+    name: 'Four Bar Loop',
+    prompt: 'loop',
+    duration: 8,
+    provider: 'stable-audio-3',
+    device: 'metal',
+    blob: new Blob(['audio'], { type: 'audio/wav' }),
+    generationLength: {
+      unit: 'bars' as const,
+      value: 4,
+      durationSeconds: 8,
+      bpm: 120,
+      timeSignature: { numerator: 4, denominator: 4 as const },
+    },
+  }
+
+  it('makes media cards draggable with the card-left grab offset', () => {
+    render(createElement(SourcePanel, createSourcePanelProps({ candidates: [candidate] })))
+    const card = screen.getByRole('button', { name: 'Preview Four Bar Loop' }).closest('article')!
+    vi.spyOn(card, 'getBoundingClientRect').mockReturnValue({
+      x: 40, y: 0, left: 40, top: 0, right: 340, bottom: 180, width: 300, height: 180,
+      toJSON: () => ({}),
+    })
+    const values = new Map<string, string>()
+    const dataTransfer = {
+      types: [] as string[],
+      effectAllowed: 'none',
+      setData(type: string, value: string) { values.set(type, value); this.types = [...values.keys()] },
+      getData(type: string) { return values.get(type) ?? '' },
+    }
+
+    const dragStart = createEvent.dragStart(card)
+    Object.defineProperties(dragStart, {
+      clientX: { value: 140 },
+      dataTransfer: { value: dataTransfer },
+    })
+    fireEvent(card, dragStart)
+
+    expect(card.getAttribute('draggable')).toBe('true')
+    expect(dataTransfer.effectAllowed).toBe('copy')
+    expect(JSON.parse(dataTransfer.getData(AUDIO_SOURCE_DRAG_TYPE))).toEqual({
+      source: 'candidate', id: candidate.id, durationBeats: 16, grabOffsetX: 100,
+    })
+    fireEvent.dragEnd(card)
+  })
+
+  it('names the fallback button after the active Loop target', () => {
+    render(createElement(SourcePanel, createSourcePanelProps({ candidates: [candidate], placeAtLoopStart: true })))
+    expect(screen.getByRole('button', { name: 'Place at loop start' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Place at playhead' })).toBeNull()
   })
 })
 

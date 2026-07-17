@@ -72,6 +72,9 @@ import { AuditionPreviewGate, isAbortError } from './ui/auditionPreview'
 import type { GeneratedCandidate, JobPresentation, MobileSurface } from './ui/types'
 import { randomGenerationSeed } from './core/generationSeed'
 import { generatedCandidateToSoundLibraryItem, soundLibraryCandidateId, soundLibraryItemToCandidate } from './ui/soundLibrary'
+import type { AudioSourceDragPayload } from './ui/sourceDrag'
+import { generatedClipName } from './ui/generatedClipName'
+import { snapGridDivision, snapGridLabel, type SnapGrid } from './ui/snapGrid'
 import { prepareWavExport, safeExportFilenamePart } from './ui/wavExportTarget'
 import type { WavExportTarget } from './ui/wavExportTarget'
 
@@ -209,11 +212,14 @@ function App() {
   }, [])
   const [playing, setPlaying] = useState(false)
   const [meters, setMeters] = useState<{ master: number; tracks: Record<string, number> }>({ master: 0, tracks: {} })
-  const [snapping, setSnapping] = useState(true)
+  const [snapGrid, setSnapGrid] = useState<SnapGrid>('bar')
+  const lastSnapGridRef = useRef<Exclude<SnapGrid, 'free'>>('bar')
+  const snapDivision = snapGridDivision(snapGrid, project.timeSignature)
+  const snapping = snapDivision !== null
   const [zoom, setZoom] = useState(1)
-  const [prompt, setPrompt] = useState('dusty neo-soul drums, loose pocket, warm tape, 118 BPM')
+  const [prompt, setPrompt] = useState('dusty neo-soul drums, loose pocket, warm tape, 120 BPM')
   const [promptFocusRequest, setPromptFocusRequest] = useState(0)
-  const [generationLength, setGenerationLength] = useState<GenerationLengthChoice>({ unit: 'seconds', value: 8 })
+  const [generationLength, setGenerationLength] = useState<GenerationLengthChoice>({ unit: 'bars', value: 4 })
   const [generationSeed, setGenerationSeed] = useState(() => randomGenerationSeed())
   const [candidates, setCandidates] = useState<GeneratedCandidate[]>([])
   const [soundLibrary] = useState(() => createGlobalSoundLibrary())
@@ -909,7 +915,7 @@ function App() {
       const mediaIdentity = await establishMediaIdentity(media)
       const candidate: GeneratedCandidate = {
         id: makeId('candidate'),
-        name: `Variation ${candidates.length + 1}`,
+        name: generatedClipName(prompt, submittedLength.durationSeconds),
         prompt,
         duration: result.duration,
         seed,
@@ -939,8 +945,8 @@ function App() {
       const libraryFailure = await storeGeneratedCandidateInLibrary(candidate, media)
       await updateProjectJob(completed.id, { state: 'completed', progress: 1, output: { assetId: result.assetId }, error: null })
       setToast(libraryFailure
-        ? `Variation ready · global Library save failed: ${libraryFailure}`
-        : 'Variation ready · saved to the global Sound Library')
+        ? `${candidate.name} ready · global Library save failed: ${libraryFailure}`
+        : `${candidate.name} ready · saved to the global Sound Library`)
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
         if (submittedJobId) await recordTerminalJobError(submittedJobId, error)
@@ -1077,7 +1083,10 @@ function App() {
     }
   }
 
-  const placeCandidate = async (candidate: GeneratedCandidate) => {
+  const placeCandidate = async (
+    candidate: GeneratedCandidate,
+    placement?: { trackId: string; startBeat: number },
+  ) => {
     let blob: Blob | undefined
     let integrity: MediaIntegrity | undefined
     if (auditionPreviewGateRef.current.activeCandidateId === candidate.id) cancelCandidatePreview()
@@ -1096,7 +1105,8 @@ function App() {
     catch (error) { setToast(`Could not place generated audio: ${(error as Error).message}`); return }
     const assetId = candidate.assetId ?? makeId('asset')
     const clipId = makeId('clip-audio')
-    const startBeat = snapping ? snapBeat(playheadBeat, '1/16') : playheadBeat
+    const requestedStartBeat = placement?.startBeat ?? (project.loop.enabled ? project.loop.startBeat : playheadBeat)
+    const startBeat = snapDivision !== null ? snapBeat(requestedStartBeat, snapDivision) : requestedStartBeat
     const generatedAsBars = candidate.generationLength?.unit === 'bars'
     const clipDurationBeats = generatedAsBars && candidate.generationLength
       ? candidate.generationLength.value * beatsPerBar(candidate.generationLength.timeSignature)
@@ -1104,7 +1114,13 @@ function App() {
     const clipTimebase: AudioClip['timebase'] = generatedAsBars && candidate.generationLength
       ? { mode: 'tempo-follow-repitch', sourceBpm: candidate.generationLength.bpm }
       : { mode: 'fixed-seconds', sourceBpm: project.bpm }
-    const requestedTrack = selectedTrack
+    const requestedTrack = placement
+      ? project.tracks.find((track) => track.id === placement.trackId)
+      : selectedTrack
+    if (placement && !requestedTrack) {
+      setToast('Place blocked · the target track no longer exists')
+      return
+    }
     if (requestedTrack?.kind === 'midi') {
       setToast(`Place blocked · ${requestedTrack.name} is a MIDI track; select an Audio track`)
       return
@@ -1115,44 +1131,75 @@ function App() {
       return
     }
     const trackId = requestedTrack?.id ?? makeId('track-audio')
-    await mutate('Place generated audio', (draft) => {
-      if (!draft.assets.some((asset) => asset.id === assetId)) {
-        draft.assets.push({
-          id: assetId,
+    const liveEngine = playbackRef.current
+    const liveHash = integrity?.actualHashSha256
+    if (
+      blob
+      && liveEngine?.getState() === 'playing'
+      && (!liveEngine.hasAudioBuffer(assetId) || !liveHash || decodedAssetHashesRef.current.get(assetId) !== liveHash)
+    ) {
+      try {
+        await liveEngine.decodeAndRegister(assetId, blob)
+        if (liveHash) decodedAssetHashesRef.current.set(assetId, liveHash)
+      } catch (error) {
+        liveEngine.unregisterAudioBuffer(assetId)
+        decodedAssetHashesRef.current.delete(assetId)
+        setToast(`Could not place generated audio into live playback: ${(error as Error).message}`)
+        return
+      }
+    }
+    try {
+      await mutate('Place generated audio', (draft) => {
+        if (!draft.assets.some((asset) => asset.id === assetId)) {
+          draft.assets.push({
+            id: assetId,
+            name: candidate.name,
+            mimeType: blob?.type || 'audio/wav',
+            durationSeconds: candidate.duration,
+            sampleRate: candidate.sampleRate,
+            channelCount: 2,
+            createdAt: new Date().toISOString(),
+            blob,
+            contentHashSha256: candidate.contentHashSha256,
+            waveform: candidate.peaks ? [candidate.peaks] : undefined,
+            integrity,
+            provenance: { source: generationSource(candidate.provider), createdAt: new Date().toISOString(), model: candidate.modelId ?? candidate.model ?? candidate.provider, prompt: candidate.prompt, jobId: candidate.jobId, metadata: { seed: candidate.seed ?? null, modelRevision: candidate.modelRevision ?? null, codeRevision: candidate.codeRevision ?? null, runtime: candidate.runtime ?? null, route: candidate.route ?? null, sourcePeak: candidate.sourcePeak ?? null, outputPeak: candidate.outputPeak ?? null, peakProtectionApplied: candidate.peakProtectionApplied ?? false, peakAttenuationDb: candidate.peakAttenuationDb ?? 0, generationLengthUnit: candidate.generationLength?.unit ?? null, generationLengthValue: candidate.generationLength?.value ?? null, generationLengthSeconds: candidate.generationLength?.durationSeconds ?? candidate.duration, generationLengthBpm: candidate.generationLength?.bpm ?? null, generationLengthMeter: candidate.generationLength ? `${candidate.generationLength.timeSignature.numerator}/${candidate.generationLength.timeSignature.denominator}` : null } },
+          })
+        }
+        let track = draft.tracks.find((entry) => entry.id === trackId)
+        if (!track) {
+          track = { id: trackId, name: 'Generated audio', kind: 'audio', color: '#F6A84B', gain: 0.9, pan: 0, mute: false, solo: false, clips: [] }
+          draft.tracks.unshift(track)
+        }
+        if (track.clips.length === 0) track.name = candidate.name
+        const clip: AudioClip = {
+          id: clipId,
           name: candidate.name,
-          mimeType: blob?.type || 'audio/wav',
-          durationSeconds: candidate.duration,
-          sampleRate: candidate.sampleRate,
-          channelCount: 2,
-          createdAt: new Date().toISOString(),
-          blob,
-          contentHashSha256: candidate.contentHashSha256,
-          waveform: candidate.peaks ? [candidate.peaks] : undefined,
-          integrity,
+          kind: 'audio',
+          startBeat,
+          durationBeats: clipDurationBeats,
+          offsetBeats: 0,
+          assetId,
+          timebase: clipTimebase,
+          gain: 1,
+          fadeIn: 0.02,
+          fadeOut: 0.04,
           provenance: { source: generationSource(candidate.provider), createdAt: new Date().toISOString(), model: candidate.modelId ?? candidate.model ?? candidate.provider, prompt: candidate.prompt, jobId: candidate.jobId, metadata: { seed: candidate.seed ?? null, modelRevision: candidate.modelRevision ?? null, codeRevision: candidate.codeRevision ?? null, runtime: candidate.runtime ?? null, route: candidate.route ?? null, sourcePeak: candidate.sourcePeak ?? null, outputPeak: candidate.outputPeak ?? null, peakProtectionApplied: candidate.peakProtectionApplied ?? false, peakAttenuationDb: candidate.peakAttenuationDb ?? 0, generationLengthUnit: candidate.generationLength?.unit ?? null, generationLengthValue: candidate.generationLength?.value ?? null, generationLengthSeconds: candidate.generationLength?.durationSeconds ?? candidate.duration, generationLengthBpm: candidate.generationLength?.bpm ?? null, generationLengthMeter: candidate.generationLength ? `${candidate.generationLength.timeSignature.numerator}/${candidate.generationLength.timeSignature.denominator}` : null } },
-        })
+        }
+        track.clips.push(clip)
+      })
+    } catch {
+      if (!project.assets.some((asset) => asset.id === assetId)) {
+        liveEngine?.unregisterAudioBuffer(assetId)
+        decodedAssetHashesRef.current.delete(assetId)
       }
-      let track = draft.tracks.find((entry) => entry.id === trackId)
-      if (!track) {
-        track = { id: trackId, name: 'Generated audio', kind: 'audio', color: '#F6A84B', gain: 0.9, pan: 0, mute: false, solo: false, clips: [] }
-        draft.tracks.unshift(track)
-      }
-      const clip: AudioClip = {
-        id: clipId,
-        name: candidate.name,
-        kind: 'audio',
-        startBeat,
-        durationBeats: clipDurationBeats,
-        offsetBeats: 0,
-        assetId,
-        timebase: clipTimebase,
-        gain: 1,
-        fadeIn: 0.02,
-        fadeOut: 0.04,
-        provenance: { source: generationSource(candidate.provider), createdAt: new Date().toISOString(), model: candidate.modelId ?? candidate.model ?? candidate.provider, prompt: candidate.prompt, jobId: candidate.jobId, metadata: { seed: candidate.seed ?? null, modelRevision: candidate.modelRevision ?? null, codeRevision: candidate.codeRevision ?? null, runtime: candidate.runtime ?? null, route: candidate.route ?? null, sourcePeak: candidate.sourcePeak ?? null, outputPeak: candidate.outputPeak ?? null, peakProtectionApplied: candidate.peakProtectionApplied ?? false, peakAttenuationDb: candidate.peakAttenuationDb ?? 0, generationLengthUnit: candidate.generationLength?.unit ?? null, generationLengthValue: candidate.generationLength?.value ?? null, generationLengthSeconds: candidate.generationLength?.durationSeconds ?? candidate.duration, generationLengthBpm: candidate.generationLength?.bpm ?? null, generationLengthMeter: candidate.generationLength ? `${candidate.generationLength.timeSignature.numerator}/${candidate.generationLength.timeSignature.denominator}` : null } },
-      }
-      track.clips.push(clip)
-    })
+      return
+    }
+    const placedProject = getCurrentProject()
+    latestProjectRef.current = placedProject
+    if (liveEngine && playbackRef.current === liveEngine && liveEngine.getState() === 'playing') {
+      liveEngine.setProject(placedProject)
+    }
     if (candidate.jobId) updateProjectJob(candidate.jobId, { output: { assetId, clipId, trackId } })
     selectClip(clipId, trackId)
     setMobileSurface('arrange')
@@ -1173,6 +1220,20 @@ function App() {
 
   const placeLibrarySound = (item: SoundLibraryItem) =>
     placeCandidate(soundLibraryItemToCandidate(item))
+
+  const dropAudioSource = (payload: AudioSourceDragPayload, trackId: string, startBeat: number) => {
+    const libraryItem = payload.source === 'library'
+      ? libraryItems.find((entry) => entry.id === payload.id)
+      : undefined
+    const candidate = payload.source === 'candidate'
+      ? candidates.find((entry) => entry.id === payload.id)
+      : libraryItem ? soundLibraryItemToCandidate(libraryItem) : undefined
+    if (!candidate) {
+      setToast('Place blocked · the dragged sound is no longer available')
+      return
+    }
+    void placeCandidate(candidate, { trackId, startBeat })
+  }
 
   const downloadLibrarySound = (item: SoundLibraryItem) =>
     downloadCandidate(soundLibraryItemToCandidate(item))
@@ -2092,7 +2153,7 @@ function App() {
             const mediaIdentity = await establishMediaIdentity(media)
             const recoveredCandidate: GeneratedCandidate = {
               id: makeId('candidate'),
-              name: `Variation ${candidates.length + 1}`,
+              name: generatedClipName(projectJob.input.prompt ?? result.prompt ?? '', result.duration),
               prompt: projectJob.input.prompt ?? result.prompt ?? '',
               duration: result.duration,
               seed: projectJob.input.seed,
@@ -2207,7 +2268,13 @@ function App() {
       event.preventDefault()
       if (event.shiftKey) void history.redo(); else void history.undo()
     }
-    if (event.key.toLowerCase() === 'g') setSnapping((value) => !value)
+    if (event.key.toLowerCase() === 'g') {
+      setSnapGrid((current) => {
+        if (current === 'free') return lastSnapGridRef.current
+        lastSnapGridRef.current = current
+        return 'free'
+      })
+    }
     if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === 's' && selectedClipId) {
       event.preventDefault()
       void splitSelected()
@@ -2233,7 +2300,7 @@ function App() {
         project={project}
         playheadBeat={playheadBeat}
         playing={playing}
-        snapping={snapping}
+        snapGrid={snapGrid}
         canUndo={history.canUndo}
         canRedo={history.canRedo}
         health={health}
@@ -2243,7 +2310,10 @@ function App() {
         onStop={() => playbackRef.current?.stop(0)}
         onSeekStart={() => { playbackRef.current?.seek(0); updatePlayhead(0) }}
         onToggleLoop={() => void mutate('Toggle loop', (draft) => { draft.loop.enabled = !draft.loop.enabled })}
-        onToggleSnap={() => setSnapping((value) => !value)}
+        onSnapGridChange={(grid) => {
+          if (grid !== 'free') lastSnapGridRef.current = grid
+          setSnapGrid(grid)
+        }}
         onUndo={() => void history.undo()}
         onRedo={() => void history.redo()}
         onBpmChange={changeProjectTempo}
@@ -2282,6 +2352,7 @@ function App() {
           onPreviewLibrary={(item) => void previewLibrarySound(item)}
           onDownloadLibrary={(item) => void downloadLibrarySound(item)}
           onDeleteLibrary={(item) => void deleteLibrarySound(item)}
+          placeAtLoopStart={project.loop.enabled}
           onClose={() => { setSourceOpen(false); setMobileSurface('arrange') }}
         />
 
@@ -2293,6 +2364,7 @@ function App() {
           playheadBeat={playheadBeat}
           zoom={zoom}
           snapping={snapping}
+          snapDivision={snapDivision ?? undefined}
           trackLevels={meters.tracks}
           canUndo={history.canUndo}
           canRedo={history.canRedo}
@@ -2315,6 +2387,7 @@ function App() {
           onUndo={() => void history.undo()}
           onRedo={() => void history.redo()}
           onZoomChange={setZoom}
+          onDropAudioSource={dropAudioSource}
         />
 
         <Inspector
@@ -2360,6 +2433,7 @@ function App() {
           bpm={project.bpm}
           timeSignature={project.timeSignature}
           snapping={snapping}
+          snapDivision={snapDivision ?? undefined}
           open={detailOpen || mobileSurface === 'detail'}
           expanded={detailExpanded}
           onEditNote={editNote}
@@ -2390,7 +2464,7 @@ function App() {
         {mobileSurface === 'mix' && <MobileMixer project={project} trackLevels={meters.tracks} masterLevel={meters.master} onToggleTrack={toggleTrack} onTrackGain={setTrackGain} onTrackPan={setTrackPan} onMasterGain={setMasterGain} />}
       </div>
 
-      <footer className="status-bar"><span><HardDrive />{persistenceLabel}</span><span>{snapping ? 'Snap 1/16' : 'Free placement'}</span><button type="button" className="status-detail-toggle" disabled={!selected} onClick={() => { if (!selected) return; setDetailOpen((value) => !value); if (detailOpen) setDetailExpanded(false) }}>{detailOpen ? 'Hide detail' : 'Show detail'}</button><div className="zoom-control"><button onClick={() => setZoom((value) => Math.max(1, value - 0.25))}>−</button><input aria-label="Timeline zoom" type="range" min="1" max="3" step="0.25" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /><button onClick={() => setZoom((value) => Math.min(3, value + 0.25))}>+</button></div><span>{selected ? `Region · ${selected.clip.name}` : selectedTrack ? `Track · ${selectedTrack.name}` : 'No selection'}</span></footer>
+      <footer className="status-bar"><span><HardDrive />{persistenceLabel}</span><span>{snapping ? `Snap ${snapGridLabel(snapGrid)}` : 'Free placement'}</span><button type="button" className="status-detail-toggle" disabled={!selected} onClick={() => { if (!selected) return; setDetailOpen((value) => !value); if (detailOpen) setDetailExpanded(false) }}>{detailOpen ? 'Hide detail' : 'Show detail'}</button><div className="zoom-control"><button onClick={() => setZoom((value) => Math.max(1, value - 0.25))}>−</button><input aria-label="Timeline zoom" type="range" min="1" max="3" step="0.25" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /><button onClick={() => setZoom((value) => Math.min(3, value + 0.25))}>+</button></div><span>{selected ? `Region · ${selected.clip.name}` : selectedTrack ? `Track · ${selectedTrack.name}` : 'No selection'}</span></footer>
       <MobileNav active={mobileSurface} onChange={mobileSurfaceChange} />
       {durabilityIssue && <aside className="durability-alert" role="alert" aria-label="Local save requires attention">
         <HardDrive aria-hidden="true" />

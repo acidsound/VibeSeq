@@ -85,6 +85,54 @@ describe('AudioWorklet project protocol', () => {
 });
 
 describe('AudioWorklet render kernel', () => {
+  it('renders a newly placed audio asset without restarting active playback', () => {
+    const sampleRate = 44_100;
+    const project = createBlankProject({ now: '2026-07-17T00:00:00.000Z', bpm: 60, sampleRate });
+    project.loop = { enabled: true, startBeat: 0, endBeat: 2 };
+    project.tracks = [{
+      id: 'audio-track',
+      name: 'Audio',
+      kind: 'audio',
+      color: '#f6a84b',
+      gain: 1,
+      pan: 0,
+      mute: false,
+      solo: false,
+      clips: [],
+    }];
+    const renderer = new VibeSeqWorkletRenderer(sampleRate, () => undefined);
+    renderer.handleCommand({ type: 'sync-project', project: createWorkletProjectSnapshot(project) });
+    renderer.handleCommand({ type: 'play', fromBeat: 0, toBeat: 2, loop: true });
+
+    expect(renderFrames(renderer, 128)[0].every((sample) => sample === 0)).toBe(true);
+
+    renderer.handleCommand({
+      type: 'sync-asset',
+      asset: {
+        id: 'hot-asset',
+        sampleRate,
+        channelData: [new Float32Array(sampleRate * 2).fill(0.5)],
+      },
+    });
+    project.tracks[0].clips.push({
+      id: 'hot-clip',
+      name: 'Hot placed audio',
+      kind: 'audio',
+      assetId: 'hot-asset',
+      startBeat: 0,
+      durationBeats: 2,
+      offsetBeats: 0,
+      timebase: { mode: 'fixed-seconds', sourceBpm: 60 },
+      gain: 1,
+      fadeIn: 0,
+      fadeOut: 0,
+      provenance: { source: 'user', createdAt: project.createdAt },
+    });
+    renderer.handleCommand({ type: 'sync-project', project: createWorkletProjectSnapshot(project) });
+
+    expect(renderFrames(renderer, 128)[0].some((sample) => Math.abs(sample) > 1e-6)).toBe(true);
+  });
+
   it('auditions the selected TinySynth pitch/program through track and master mixer gain', () => {
     const sampleRate = 8_000;
     const project = createBlankProject({ now: '2026-07-15T00:00:00.000Z', bpm: 120 });

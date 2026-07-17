@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import { createElement } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ArrangedMidiNote } from '../core'
-import { createDemoProject } from '../core'
+import { createDemoProject, snapBeat } from '../core'
+import { getArrangementTimelineBeats } from '../ui/music'
+import { AUDIO_SOURCE_DRAG_TYPE } from '../ui/sourceDrag'
 import { Arrangement, getRenderableWaveformSlice, midiThumbnailPath } from './Arrangement'
 
 beforeEach(() => {
@@ -132,7 +134,113 @@ const createArrangementProps = (overrides: Partial<ArrangementProps> = {}): Arra
   onUndo: vi.fn(),
   onRedo: vi.fn(),
   onZoomChange: vi.fn(),
+  onDropAudioSource: vi.fn(),
   ...overrides,
+})
+
+const audioSourceDataTransfer = (payload: object) => ({
+  types: [AUDIO_SOURCE_DRAG_TYPE],
+  effectAllowed: 'copy',
+  dropEffect: 'none',
+  getData: (type: string) => type === AUDIO_SOURCE_DRAG_TYPE ? JSON.stringify(payload) : '',
+})
+
+describe('Arrangement source-card drop', () => {
+  it('aligns placement to the dragged card left edge and then applies snap', () => {
+    const base = createDemoProject({ now: '2026-07-15T00:00:00.000Z' })
+    const audioTrack = base.tracks.find((track) => track.kind === 'audio')!
+    const project = {
+      ...base,
+      tracks: base.tracks.map((track) => track.id === audioTrack.id ? { ...track, clips: [] } : track),
+    }
+    const onDropAudioSource = vi.fn()
+    render(createElement(Arrangement, createArrangementProps({ project, onDropAudioSource })))
+    const lane = screen.getByLabelText(`${audioTrack.name} timeline lane`)
+    vi.spyOn(lane, 'getBoundingClientRect').mockReturnValue({
+      x: 200, y: 0, left: 200, top: 0, right: 1000, bottom: 80, width: 800, height: 80,
+      toJSON: () => ({}),
+    })
+    const payload = { source: 'candidate', id: 'candidate-1', durationBeats: 1, grabOffsetX: 100 }
+    const dataTransfer = audioSourceDataTransfer(payload)
+
+    const dragOver = createEvent.dragOver(lane)
+    Object.defineProperties(dragOver, {
+      clientX: { value: 500 },
+      dataTransfer: { value: dataTransfer },
+    })
+    fireEvent(lane, dragOver)
+    expect(dataTransfer.dropEffect).toBe('copy')
+    const timelineBeats = getArrangementTimelineBeats(project, 0)
+    const expectedStart = snapBeat(((500 - 100 - 200) / 800) * timelineBeats, '1/16')
+    const preview = lane.querySelector<HTMLElement>('.source-drop-preview')
+    expect(preview?.classList.contains('is-valid')).toBe(true)
+    expect(preview?.style.left).toBe(`${(expectedStart / timelineBeats) * 100}%`)
+    expect(preview?.style.width).toBe(`${(payload.durationBeats / timelineBeats) * 100}%`)
+    const drop = createEvent.drop(lane)
+    Object.defineProperties(drop, {
+      clientX: { value: 500 },
+      dataTransfer: { value: dataTransfer },
+    })
+    fireEvent(lane, drop)
+
+    expect(onDropAudioSource).toHaveBeenCalledWith(payload, audioTrack.id, expectedStart)
+    expect(lane.querySelector('.source-drop-preview')).toBeNull()
+  })
+
+  it('rejects an Audio source dropped on a MIDI track', () => {
+    const project = createDemoProject({ now: '2026-07-15T00:00:00.000Z' })
+    const midiTrack = project.tracks.find((track) => track.kind === 'midi')!
+    const onDropAudioSource = vi.fn()
+    render(createElement(Arrangement, createArrangementProps({ project, onDropAudioSource })))
+    const lane = screen.getByLabelText(`${midiTrack.name} timeline lane`)
+    vi.spyOn(lane, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 800, bottom: 80, width: 800, height: 80,
+      toJSON: () => ({}),
+    })
+    const dataTransfer = audioSourceDataTransfer({ source: 'library', id: 'sound-1', durationBeats: 4, grabOffsetX: 20 })
+
+    const dragOver = createEvent.dragOver(lane)
+    Object.defineProperties(dragOver, {
+      clientX: { value: 400 },
+      dataTransfer: { value: dataTransfer },
+    })
+    fireEvent(lane, dragOver)
+    expect(dataTransfer.dropEffect).toBe('none')
+    const drop = createEvent.drop(lane)
+    Object.defineProperties(drop, {
+      clientX: { value: 400 },
+      dataTransfer: { value: dataTransfer },
+    })
+    fireEvent(lane, drop)
+    expect(onDropAudioSource).not.toHaveBeenCalled()
+  })
+
+  it('shows only the proposed Region span in red when it collides', () => {
+    const project = createDemoProject({ now: '2026-07-15T00:00:00.000Z' })
+    const audioTrack = project.tracks.find((track) => track.kind === 'audio' && track.clips.length > 0)!
+    const occupiedClip = audioTrack.clips[0]!
+    const onDropAudioSource = vi.fn()
+    render(createElement(Arrangement, createArrangementProps({ project, onDropAudioSource })))
+    const lane = screen.getByLabelText(`${audioTrack.name} timeline lane`)
+    vi.spyOn(lane, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 800, bottom: 80, width: 800, height: 80,
+      toJSON: () => ({}),
+    })
+    const timelineBeats = getArrangementTimelineBeats(project, 0)
+    const clientX = (occupiedClip.startBeat / timelineBeats) * 800
+    const payload = { source: 'candidate', id: 'candidate-collision', durationBeats: 1, grabOffsetX: 0 }
+    const dataTransfer = audioSourceDataTransfer(payload)
+    const dragOver = createEvent.dragOver(lane)
+    Object.defineProperties(dragOver, {
+      clientX: { value: clientX },
+      dataTransfer: { value: dataTransfer },
+    })
+    fireEvent(lane, dragOver)
+
+    expect(dataTransfer.dropEffect).toBe('none')
+    expect(lane.classList.contains('is-invalid-drop-target')).toBe(false)
+    expect(lane.querySelector('.source-drop-preview.is-collision')).not.toBeNull()
+  })
 })
 
 describe('Arrangement add-track entries', () => {

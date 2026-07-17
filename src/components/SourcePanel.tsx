@@ -9,6 +9,7 @@ import { GENERATION_LENGTH_CHOICES, generationLengthChoiceId, generationLengthLa
 import type { GenerationLengthChoice } from '../ui/generationLength'
 import type { GeneratedCandidate, JobPresentation } from '../ui/types'
 import { formatTime, waveformPath } from '../ui/music'
+import { clearAudioSourceDrag, writeAudioSourceDrag } from '../ui/sourceDrag'
 
 type SourcePanelProps = {
   prompt: string
@@ -39,6 +40,7 @@ type SourcePanelProps = {
   onPreviewLibrary?: (item: SoundLibraryItem) => void
   onDownloadLibrary?: (item: SoundLibraryItem) => void
   onDeleteLibrary?: (item: SoundLibraryItem) => void
+  placeAtLoopStart?: boolean
   onClose: () => void
 }
 
@@ -73,6 +75,7 @@ export function SourcePanel({
   onPreviewLibrary,
   onDownloadLibrary,
   onDeleteLibrary,
+  placeAtLoopStart = false,
   onClose,
 }: SourcePanelProps) {
   const [mode, setMode] = useState<SourceMode>('generate')
@@ -147,6 +150,15 @@ export function SourcePanel({
     importDragDepthRef.current = 0
     setImportDragging(false)
   }
+
+  const durationBeats = (durationSeconds: number, length?: SoundLibraryItem['generationLength']) => {
+    if (length?.unit === 'bars') {
+      return length.value * ((length.timeSignature.numerator * 4) / length.timeSignature.denominator)
+    }
+    return (durationSeconds * bpm) / 60
+  }
+
+  const placeLabel = placeAtLoopStart ? 'Place at loop start' : 'Place at playhead'
 
   return (
     <aside className={`source-panel panel ${open ? 'is-open' : ''}`} aria-label="Sound source">
@@ -240,7 +252,19 @@ export function SourcePanel({
             <div className="empty-candidates"><AudioLines /><p>Your variations stay local.<br />Generate a sound to begin.</p></div>
           )}
           {candidates.map((candidate) => (
-            <article className="candidate-card" key={candidate.id}>
+            <article
+              className="candidate-card"
+              key={candidate.id}
+              draggable={Boolean(candidate.blob || candidate.bytes || candidate.assetUrl)}
+              onDragStart={(event) => writeAudioSourceDrag(event.dataTransfer, {
+                source: 'candidate',
+                id: candidate.id,
+                durationBeats: durationBeats(candidate.duration, candidate.generationLength),
+                grabOffsetX: Math.max(0, event.clientX - event.currentTarget.getBoundingClientRect().left),
+              })}
+              onDragEnd={clearAudioSourceDrag}
+              title="Drag to an Audio track in the Arrangement"
+            >
               {(() => {
                 const hasMedia = Boolean(candidate.blob || candidate.bytes || candidate.assetUrl)
                 return <>
@@ -257,7 +281,7 @@ export function SourcePanel({
                   Peak protected −{(candidate.peakAttenuationDb ?? 0).toFixed(2)} dB · source peak {(candidate.sourcePeak ?? 0).toFixed(3)}
                 </p>
               )}
-              {hasMedia && <div className="candidate-actions"><button onClick={() => onPlace(candidate)}><Plus />Place at playhead</button><button onClick={() => onDownload(candidate)} aria-label={`Download ${candidate.name}`}><Download /></button></div>}
+              {hasMedia && <div className="candidate-actions"><button onClick={() => onPlace(candidate)}><Plus />{placeLabel}</button><button onClick={() => onDownload(candidate)} aria-label={`Download ${candidate.name}`}><Download /></button></div>}
                 </>
               })()}
             </article>
@@ -321,7 +345,19 @@ export function SourcePanel({
               {!libraryLoading && !libraryError && visibleLibraryItems.map((item) => {
                 const hasMedia = Boolean(item.blob || item.bytes)
                 const previewing = previewingLibraryItemId === item.id
-                return <article className="candidate-card library-card" key={item.id}>
+                return <article
+                  className="candidate-card library-card"
+                  key={item.id}
+                  draggable={hasMedia}
+                  onDragStart={(event) => writeAudioSourceDrag(event.dataTransfer, {
+                    source: 'library',
+                    id: item.id,
+                    durationBeats: durationBeats(item.durationSeconds, item.generationLength),
+                    grabOffsetX: Math.max(0, event.clientX - event.currentTarget.getBoundingClientRect().left),
+                  })}
+                  onDragEnd={clearAudioSourceDrag}
+                  title="Drag to an Audio track in the Arrangement"
+                >
                   <div className="candidate-title"><strong>{item.name}</strong><span>{formatTime(item.durationSeconds)}</span></div>
                   {hasMedia && onPreviewLibrary ? <button className={`candidate-waveform ${previewing ? 'is-playing' : ''}`} onClick={() => onPreviewLibrary(item)} aria-label={`${previewing ? 'Stop previewing' : 'Preview'} ${item.name}`} aria-pressed={previewing}>
                     <span className="preview-icon">{previewing ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}</span>
@@ -330,7 +366,7 @@ export function SourcePanel({
                   <div className="candidate-meta"><span>{item.source}</span><span>{item.provider ?? item.model ?? 'local'}</span></div>
                   {item.prompt && <p className="library-prompt">{item.prompt}</p>}
                   <div className="candidate-actions">
-                    {hasMedia && onPlaceLibrary && <button type="button" onClick={() => onPlaceLibrary(item)}><Plus />Place at playhead</button>}
+                    {hasMedia && onPlaceLibrary && <button type="button" onClick={() => onPlaceLibrary(item)}><Plus />{placeLabel}</button>}
                     <span className="library-secondary-actions">
                       {hasMedia && onDownloadLibrary && <button type="button" onClick={() => onDownloadLibrary(item)} aria-label={`Download ${item.name}`}><Download /></button>}
                       {onDeleteLibrary && <button type="button" className="library-delete" onClick={() => onDeleteLibrary(item)} aria-label={`Delete ${item.name} from Sound Library`}><Trash2 /></button>}

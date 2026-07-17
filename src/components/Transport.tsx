@@ -17,12 +17,13 @@ import type { InferenceHealth } from '../api/inference'
 import { beatToBarsBeatsTicks } from '../core'
 import type { Project } from '../types'
 import { presentTransportEngine } from '../ui/engineHealth'
+import { SNAP_GRID_OPTIONS, type SnapGrid } from '../ui/snapGrid'
 
 type TransportProps = {
   project: Project
   playheadBeat: number
   playing: boolean
-  snapping: boolean
+  snapGrid: SnapGrid
   canUndo: boolean
   canRedo: boolean
   health: InferenceHealth | null
@@ -32,7 +33,7 @@ type TransportProps = {
   onStop: () => void
   onSeekStart: () => void
   onToggleLoop: () => void
-  onToggleSnap: () => void
+  onSnapGridChange: (grid: SnapGrid) => void
   onUndo: () => void
   onRedo: () => void
   /** Return false when the edit is synchronously rejected (for example, by overlap preflight). */
@@ -46,7 +47,7 @@ export function Transport({
   project,
   playheadBeat,
   playing,
-  snapping,
+  snapGrid,
   canUndo,
   canRedo,
   health,
@@ -56,7 +57,7 @@ export function Transport({
   onStop,
   onSeekStart,
   onToggleLoop,
-  onToggleSnap,
+  onSnapGridChange,
   onUndo,
   onRedo,
   onBpmChange,
@@ -165,9 +166,17 @@ export function Transport({
         <span style={{ '--meter': `${Math.round(masterLevel * 100)}%` } as React.CSSProperties} />
       </div>
 
-      <button className={`snap-block transport-section ${snapping ? 'is-active' : ''}`} onClick={onToggleSnap} aria-label="Toggle snap, 1/16 grid" aria-pressed={snapping}>
-        <Grid3X3 /><span>1 / 16</span><small>{snapping ? 'SNAP' : 'FREE'}</small>
-      </button>
+      <label className={`snap-block transport-section ${snapGrid !== 'free' ? 'is-active' : ''}`}>
+        <Grid3X3 aria-hidden="true" />
+        <select
+          aria-label="Snap grid"
+          value={snapGrid}
+          onChange={(event) => onSnapGridChange(event.target.value as SnapGrid)}
+        >
+          {SNAP_GRID_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <small>{snapGrid === 'free' ? 'FREE' : 'SNAP'}</small>
+      </label>
 
       <button className="engine-badge" onClick={onOpenSettings} title={engine.title} aria-label={`Engine settings · ${engine.label} · ${engine.ready ? 'ready' : 'not ready'}`}>
         <span className={`status-dot ${engine.ready ? 'online' : ''}`} aria-hidden="true" />
