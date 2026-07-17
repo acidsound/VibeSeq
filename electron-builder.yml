@@ -8,6 +8,7 @@ directories:
   buildResources: build
 files:
   - desktop/main.cjs
+  - desktop/port-selection.cjs
   - desktop/storage-root.cjs
 extraResources:
   - from: dist
