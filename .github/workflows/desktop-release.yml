@@ -18,9 +18,15 @@ jobs:
           - label: Windows x64
             os: windows-latest
             artifact: vibeseq-windows-x64
+            package_script: desktop:package
           - label: macOS arm64
             os: macos-15
             artifact: vibeseq-macos-arm64
+            package_script: desktop:package
+          - label: Linux x64
+            os: ubuntu-22.04
+            artifact: vibeseq-linux-x64
+            package_script: desktop:package:linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -35,10 +41,12 @@ jobs:
         with:
           version: "0.11.1"
           enable-cache: true
-          cache-dependency-glob: server/uv.lock
+          cache-dependency-glob: |
+            server/uv.lock
+            server/desktop-linux-requirements.txt
       - run: npm ci
       - run: npm run check
-      - run: npm run desktop:package
+      - run: npm run ${{ matrix.package_script }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - run: npm run desktop:assert-model-free
@@ -49,12 +57,48 @@ jobs:
             release/*.exe
             release/*.dmg
             release/*.zip
+            release/*.AppImage
           if-no-files-found: error
           retention-days: 14
 
+  linux-model-release:
+    name: Publish Linux model bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy the verified TFLite files into the Linux-specific release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: stable-audio-3-c2949a-windows-x64
+          TARGET_TAG: stable-audio-3-c2949a-linux-x64
+        run: |
+          if gh release view "${TARGET_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "${TARGET_TAG} already exists."
+            exit 0
+          fi
+
+          bundle="${RUNNER_TEMP}/stable-audio-linux"
+          mkdir -p "${bundle}"
+          gh release download "${SOURCE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --dir "${bundle}" \
+            --pattern 'LICENSE-Gemma.md' \
+            --pattern 'LICENSE-Stability-AI-Community.md' \
+            --pattern 'NOTICE.txt' \
+            --pattern 'sa3-c2949a-tflite-*'
+          cp desktop/stable-audio-model-bundle.json "${bundle}/stable-audio-model-bundle.json"
+          gh release create "${TARGET_TAG}" "${bundle}"/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title 'Stable Audio 3 Medium · Linux x64 TFLite · c2949a' \
+            --notes 'Linux x64 first-run model bundle. The model files are the official optimized TFLite medium weights used by the CPU/LiteRT runtime. Powered by Stability AI.' \
+            --prerelease
+
   release:
     name: Publish prerelease
-    needs: build
+    needs:
+      - build
+      - linux-model-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -77,15 +121,16 @@ jobs:
 
           - macOS ARM64 MLX bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-macos-arm64
           - Windows x64 TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-windows-x64
+          - Linux x64 TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-linux-x64
           - MuScriptor Medium: https://huggingface.co/MuScriptor/muscriptor-medium
 
-          Only the Stable Audio model format for the running OS is downloaded. macOS stores it below `~/VibeSeq Data/models`; the Windows portable build stores it below `VibeSeq Data/models` beside `VibeSeq.exe`.
+          Only the Stable Audio model format for the running OS is downloaded. macOS and Linux store it below `~/VibeSeq Data/models`; the Windows portable build stores it below `VibeSeq Data/models` beside `VibeSeq.exe`.
 
-          MuScriptor remains gated and is not redistributed. Each user accepts its Hugging Face conditions, downloads the pinned `config.json` and `model.safetensors` in their browser, and places them directly under **SAVE CACHE UNDER**. That exact revision folder opens in Finder or File Explorer. VibeSeq does not download, select, or move these files or request or store a Hugging Face token; **Verify files in cache** only validates the files already in that folder.
+          MuScriptor remains gated and is not redistributed. Each user accepts its Hugging Face conditions, downloads the pinned `config.json` and `model.safetensors` in their browser, and places them directly under **SAVE CACHE UNDER**. That exact revision folder opens in Finder, File Explorer, or the Linux file manager. VibeSeq does not download, select, or move these files or request or store a Hugging Face token; **Verify files in cache** only validates the files already in that folder.
 
           Powered by Stability AI.
 
-          Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. Verify the downloaded asset with `SHA256SUMS.txt` before running it.
+          Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. On Linux, run `chmod +x VibeSeq-*.AppImage` before launching. Verify the downloaded asset with `SHA256SUMS.txt` before running it.
           EOF
       - name: Create GitHub prerelease
         env:

@@ -33,6 +33,17 @@ test('macOS storage defaults to VibeSeq Data in the home directory', () => {
   assert.equal(root, path.join('/Users/artist', 'VibeSeq Data'))
 })
 
+test('Linux storage defaults to VibeSeq Data in the home directory', () => {
+  const root = resolveStorageRoot({
+    platform: 'linux',
+    env: {},
+    homeDirectory: '/home/artist',
+    executablePath: '/tmp/.mount_VibeSeq/VibeSeq',
+    isPackaged: true,
+  })
+  assert.equal(root, path.join('/home/artist', 'VibeSeq Data'))
+})
+
 test('VIBESEQ_HOME overrides platform defaults and expands home', () => {
   const homeDirectory = path.join(path.parse(process.cwd()).root, 'Users', 'artist')
   const root = resolveStorageRoot({

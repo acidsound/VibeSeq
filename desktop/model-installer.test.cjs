@@ -107,18 +107,26 @@ test('refuses installation when the redistributed model terms were not accepted'
 
 test('reports an unsupported OS without downloading another platform model', async () => {
   const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-model-platform-'))
-  const installer = new StableAudioModelInstaller({ storageRoot, manifest, platform: 'linux', arch: 'x64' })
+  const installer = new StableAudioModelInstaller({ storageRoot, manifest, platform: 'freebsd', arch: 'x64' })
   assert.equal((await installer.status()).supported, false)
-  await assert.rejects(() => installer.install({ accepted: true }), /not packaged for linux-x64/)
+  await assert.rejects(() => installer.install({ accepted: true }), /not packaged for freebsd-x64/)
 })
 
-test('shipping manifest separates macOS and Windows releases and model formats', () => {
+test('shipping manifest separates all OS releases and selects the expected model formats', () => {
   const shipping = require('./stable-audio-model-bundle.json')
   const mac = shipping.variants['darwin-arm64']
   const windows = shipping.variants['win32-x64']
+  const linux = shipping.variants['linux-x64']
   assert.notEqual(mac.release.tag, windows.release.tag)
+  assert.notEqual(windows.release.tag, linux.release.tag)
   assert.ok(mac.files.every((file) => file.destination.startsWith('MLX/')))
   assert.ok(windows.files.every((file) => file.destination.startsWith('tflite/')))
+  assert.ok(linux.files.every((file) => file.destination.startsWith('tflite/')))
+  assert.deepEqual(
+    linux.files.map(({ destination, size, sha256 }) => ({ destination, size, sha256 })),
+    windows.files.map(({ destination, size, sha256 }) => ({ destination, size, sha256 })),
+  )
   assert.ok(mac.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
   assert.ok(windows.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
+  assert.ok(linux.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
 })

@@ -4,6 +4,22 @@ VibeSeq is an AI-assisted, local-first WebDAW built around one continuous loop:
 
 `prompt → generate audio → place → extract MIDI → edit → arrange → play/export`
 
+## Download and run
+
+Download the ready-to-run desktop app from the
+[VibeSeq v0.1.0-alpha.8 GitHub Release](https://github.com/acidsound/VibeSeq/releases/tag/v0.1.0-alpha.8).
+Node.js, Python, and `uv` are not required.
+
+- macOS Apple Silicon: open the `.dmg`.
+- Windows x64: run the portable `.exe`.
+- Linux x64: make the `.AppImage` executable and run it.
+
+The executable does not contain model weights. On first launch VibeSeq offers
+the correct Stable Audio download for the running OS after its terms are
+accepted. MuScriptor remains gated: accept its Hugging Face conditions,
+download `config.json` and `model.safetensors` into the folder shown by
+**SAVE CACHE UNDER**, then choose **Verify files in cache**.
+
 ![VibeSeq working prototype with generated audio, linked MuScriptor MIDI regions, and multi-note piano-roll editing](docs/vibeseq-muscriptor-workflow.png)
 
 *Generated audio and its linked MuScriptor Medium transcription arranged and

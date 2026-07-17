@@ -108,6 +108,41 @@
           ]
         }
       ]
+    },
+    "linux-x64": {
+      "label": "Linux x64 · LiteRT CPU",
+      "release": {
+        "tag": "stable-audio-3-c2949a-linux-x64",
+        "baseUrl": "https://github.com/acidsound/VibeSeq/releases/download/stable-audio-3-c2949a-linux-x64"
+      },
+      "downloadBytes": 2582232150,
+      "minimumFreeBytes": 4500000000,
+      "files": [
+        {
+          "destination": "tflite/sa3-m/dit_w8a8-dyn.tflite",
+          "size": 1469163200,
+          "sha256": "3feea38f595c12edb785f87225a243bfacc33866ecdcf76fb2766cb9e9d153c5",
+          "parts": [
+            { "asset": "sa3-c2949a-tflite-dit-w8a8-dyn.tflite", "size": 1469163200, "sha256": "3feea38f595c12edb785f87225a243bfacc33866ecdcf76fb2766cb9e9d153c5" }
+          ]
+        },
+        {
+          "destination": "tflite/same-l/dec_w8a8-dyn.tflite",
+          "size": 549227520,
+          "sha256": "6d6b88b418e51aa4bd18e1fdf26c81a013932b327458b3bcc130c3d1e819513e",
+          "parts": [
+            { "asset": "sa3-c2949a-tflite-same-l-dec-w8a8-dyn.tflite", "size": 549227520, "sha256": "6d6b88b418e51aa4bd18e1fdf26c81a013932b327458b3bcc130c3d1e819513e" }
+          ]
+        },
+        {
+          "destination": "tflite/t5gemma/encoder_fp16.tflite",
+          "size": 563818608,
+          "sha256": "8530d0b3e6b9b9dcf1239145c2a853fb749708eaddbb472ff8f0802b50059372",
+          "parts": [
+            { "asset": "sa3-c2949a-tflite-t5gemma-encoder-fp16.tflite", "size": 563818608, "sha256": "8530d0b3e6b9b9dcf1239145c2a853fb749708eaddbb472ff8f0802b50059372" }
+          ]
+        }
+      ]
     }
   }
 }

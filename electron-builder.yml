@@ -44,3 +44,11 @@ win:
       arch:
         - x64
   artifactName: "${productName}-${version}-Windows-${arch}.${ext}"
+linux:
+  icon: build/icon.png
+  category: AudioVideo
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  artifactName: "${productName}-${version}-Linux-${arch}.${ext}"

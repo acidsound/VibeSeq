@@ -1,6 +1,6 @@
 {
   "name": "vibeseq",
-  "version": "0.1.0-alpha.7",
+  "version": "0.1.0-alpha.8",
   "description": "Local-first AI-assisted WebDAW for audio generation, transcription, editing, and arrangement",
   "author": "VibeSeq contributors",
   "private": true,
@@ -22,12 +22,15 @@
     "check": "npm run test && npm run desktop:test && npm run build",
     "desktop:model-runtime": "node scripts/prepare-desktop-model-runtime.mjs",
     "desktop:sidecar": "npm run desktop:model-runtime && uv run --project server --extra models --with pyinstaller==6.21.0 pyinstaller --noconfirm --clean --distpath desktop-out/sidecar --workpath desktop-out/pyinstaller desktop/vibeseq-inference.spec",
+    "desktop:sidecar:linux": "npm run desktop:model-runtime && node scripts/build-desktop-sidecar-linux.mjs",
     "desktop:prepare": "npm run build && npm run desktop:sidecar",
+    "desktop:prepare:linux": "npm run build && npm run desktop:sidecar:linux",
     "desktop:smoke": "node desktop/smoke-sidecar.mjs",
     "desktop:test": "node --test desktop/*.test.cjs",
     "desktop:assert-model-free": "node scripts/assert-desktop-package-model-free.mjs release",
     "desktop:pack": "npm run desktop:prepare && npm run desktop:smoke && electron-builder --dir --publish never",
-    "desktop:package": "npm run desktop:prepare && npm run desktop:smoke && electron-builder --publish never"
+    "desktop:package": "npm run desktop:prepare && npm run desktop:smoke && electron-builder --publish never",
+    "desktop:package:linux": "npm run desktop:prepare:linux && npm run desktop:smoke && electron-builder --linux AppImage --x64 --publish never"
   },
   "dependencies": {
     "@fontsource-variable/space-grotesk": "^5.2.10",
