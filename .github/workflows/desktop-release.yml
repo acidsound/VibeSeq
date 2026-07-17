@@ -71,14 +71,17 @@ jobs:
 
           This unsigned prerelease is for clean-machine validation of the VibeSeq desktop runtime, local persistence, arrangement editing, playback, and export.
 
-          It embeds the Studio, Stable Audio 3 execution source, and the frozen real-model runtime, so Node.js, Python, and `uv` are not required. Model weights are not included.
+          It embeds the Studio, Stable Audio 3 execution source, frozen real-model runtime, and the verified first-run model installer, so Node.js, Python, and `uv` are not required. Model weights are not included in the executable.
 
-          Install the exact model revisions shown by VibeSeq's Inference readiness panel from the official repositories:
+          On every launch VibeSeq checks the current platform's exact Stable Audio files. If `VibeSeq Data` is absent, empty, incomplete, or missing a required file, the Inference readiness panel offers a resumable SHA-256-verified download after the model terms are accepted:
 
-          - Stable Audio 3 Medium optimized: https://huggingface.co/stabilityai/stable-audio-3-optimized
+          - macOS ARM64 MLX bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-macos-arm64
+          - Windows x64 TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-windows-x64
           - MuScriptor Medium: https://huggingface.co/MuScriptor/muscriptor-medium
 
-          VibeSeq displays the required files and exact cache path. macOS stores them below `~/VibeSeq Data/models`; the Windows portable build stores them below `VibeSeq Data/models` beside `VibeSeq.exe`.
+          Only the model format for the running OS is downloaded. macOS stores it below `~/VibeSeq Data/models`; the Windows portable build stores it below `VibeSeq Data/models` beside `VibeSeq.exe`. MuScriptor remains gated and is not redistributed.
+
+          Powered by Stability AI.
 
           Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. Verify the downloaded asset with `SHA256SUMS.txt` before running it.
           EOF

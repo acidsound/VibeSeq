@@ -37,17 +37,35 @@ The desktop sidecar freezes the real medium-model dependencies and pinned
 Stable Audio execution source. It defaults to Stable Audio 3 Medium and
 MuScriptor Medium; demo providers are never substituted silently.
 
-Desktop packages never embed model weights. The Inference readiness panel
-reports the exact revision, required files, official repository, and effective
-cache path for each missing model.
+Desktop packages never embed model weights. On every launch, VibeSeq checks the
+exact Stable Audio files required by the current operating system. If
+`VibeSeq Data` is new, empty, partially downloaded, or missing any required
+file, the Inference readiness panel opens the built-in installer. Interrupted
+assets resume with HTTP Range requests; every release part and final model file
+must pass its pinned SHA-256 before activation.
+
+Stable Audio distribution is split by operating system so no machine downloads
+an unusable runtime format:
+
+- `stable-audio-3-c2949a-macos-arm64`: MLX Medium weights for Apple Silicon,
+  approximately 5.18 GB.
+- `stable-audio-3-c2949a-windows-x64`: TFLite Medium weights for Windows CPU,
+  approximately 2.58 GB.
+
+Both are fixed GitHub Releases rather than `latest` aliases. The app bundles an
+immutable manifest containing the release asset names, sizes, and digests. The
+user must accept the Stability AI Community License and Gemma Terms before the
+download starts; copies of both terms and the required notice are installed
+beside the model snapshot.
 
 - Stable Audio 3 Medium optimized:
   <https://huggingface.co/stabilityai/stable-audio-3-optimized>
 - MuScriptor Medium:
   <https://huggingface.co/MuScriptor/muscriptor-medium>
 
-Keep the Hugging Face repository cache layout intact beneath the path shown by
-the application. The default cache roots are:
+The installer writes the exact Hugging Face repository snapshot layout beneath
+the path shown by the application, so the inference process can run offline
+after installation. The default cache roots are:
 
 - macOS: `~/VibeSeq Data/models/huggingface/hub`
 - Windows portable: `VibeSeq Data/models/huggingface/hub` beside
@@ -82,7 +100,9 @@ On a clean Windows 11 x64 machine:
    failures.
 3. Create a project, add independent Audio and MIDI tracks, edit and play both,
    save, close, and reopen the app.
-4. Install the exact model cache, generate with Stable Audio 3 Medium, extract
+4. Start with an absent or empty `VibeSeq Data`, accept the displayed model
+   terms, let the built-in installer download only the Windows TFLite Release,
+   then generate with Stable Audio 3 Medium and extract
    with MuScriptor Medium, and confirm both provenance records and runtime
    routes match the health response.
 5. Export a `.vibeseq` project, full mix, MIDI, one track, and the all-track ZIP;

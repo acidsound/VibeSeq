@@ -1,4 +1,5 @@
-import { CircleAlert, CircleCheck, ExternalLink, MonitorCog, Save, X } from 'lucide-react'
+import { CircleAlert, CircleCheck, Download, ExternalLink, MonitorCog, Save, Square, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { EngineCapability, InferenceHealth } from '../api/inference'
 import { useModalFocus } from '../hooks/useModalFocus'
 import { presentEngine } from '../ui/engineHealth'
@@ -9,6 +10,7 @@ type EngineDialogProps = {
   transcriptionProvider: string
   onGenerationProvider: (value: string) => void
   onTranscriptionProvider: (value: string) => void
+  onModelInstalled?: () => void | Promise<void>
   onClose: () => void
 }
 
@@ -19,7 +21,19 @@ type EngineCapabilityCardProps = {
   selectedProvider: string
   options: string[]
   onProvider: (value: string) => void
+  onModelInstalled?: () => void | Promise<void>
   modelCachePath?: string
+}
+
+const formatBytes = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 GB'
+  return `${(bytes / 1_000_000_000).toFixed(2)} GB`
+}
+
+const openExternal = (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
+  if (!window.vibeseqDesktop) return
+  event.preventDefault()
+  void window.vibeseqDesktop.openExternal(url)
 }
 
 const optionLabel = (provider: string): string => {
@@ -52,12 +66,66 @@ function EngineCapabilityCard({
   selectedProvider,
   options,
   onProvider,
+  onModelInstalled,
   modelCachePath,
 }: EngineCapabilityCardProps) {
   const presentation = presentEngine(health, kind, selectedProvider)
   const capability = capabilityFor(health, kind, selectedProvider)
   const sourceUrl = capability ? sourceRevisionUrl(capability) : null
   const statusClass = presentation.ready ? 'is-ready' : presentation.inspected ? 'is-blocked' : 'is-unknown'
+  const desktopInstaller = kind === 'generation' && selectedProvider === 'stable-audio-3'
+    ? window.vibeseqDesktop?.stableAudio
+    : undefined
+  const [installStatus, setInstallStatus] = useState<StableAudioInstallStatus | null>(null)
+  const [installProgress, setInstallProgress] = useState<StableAudioInstallProgress | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [installError, setInstallError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!desktopInstaller || capability?.weightsCached !== false) return
+    let active = true
+    void desktopInstaller.status().then((status) => {
+      if (active) setInstallStatus(status)
+    }).catch((error) => {
+      if (active) setInstallError(error instanceof Error ? error.message : String(error))
+    })
+    const unsubscribe = desktopInstaller.onProgress((progress) => {
+      if (!active) return
+      setInstallProgress(progress)
+      setInstalling(progress.phase !== 'complete')
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [capability?.weightsCached, desktopInstaller])
+
+  const startInstallation = async () => {
+    if (!desktopInstaller || !termsAccepted) return
+    setInstallError(null)
+    setInstalling(true)
+    try {
+      const status = await desktopInstaller.install(true)
+      setInstallStatus(status)
+      setInstallProgress({
+        phase: 'complete',
+        asset: null,
+        downloadedBytes: status.totalBytes,
+        totalBytes: status.totalBytes,
+      })
+      await onModelInstalled?.()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/abort|cancel/i.test(message)) setInstallError(message)
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  const cancelInstallation = async () => {
+    await desktopInstaller?.cancel()
+  }
 
   return (
     <section className={`engine-capability-card ${statusClass}`} aria-label={`${title} readiness`}>
@@ -100,12 +168,12 @@ function EngineCapabilityCard({
           <b>REQUIRED</b>
           <ul>{presentation.actions.map((action) => <li key={action}>{action}</li>)}</ul>
           {presentation.accessUrl && capability?.weightsCached === false && (
-            <a href={presentation.accessUrl} target="_blank" rel="noreferrer">
+            <a href={presentation.accessUrl} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, presentation.accessUrl!)}>
               {capability.gated ? 'Open model access page' : 'Open official model files'} <ExternalLink />
             </a>
           )}
           {sourceUrl && capability?.codeCached !== true && (
-            <a href={sourceUrl} target="_blank" rel="noreferrer">
+            <a href={sourceUrl} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, sourceUrl)}>
               Open exact source revision <ExternalLink />
             </a>
           )}
@@ -118,6 +186,8 @@ function EngineCapabilityCard({
           <dl>
             <div><dt>FROM</dt><dd>{capability.bootstrap.modelId}@{capability.bootstrap.revision}</dd></div>
             <div><dt>SAVE CACHE UNDER</dt><dd>{modelCachePath || 'Model cache path not reported'}</dd></div>
+            {installStatus?.variantLabel && <div><dt>THIS OS</dt><dd>{installStatus.variantLabel}</dd></div>}
+            {installStatus?.totalBytes ? <div><dt>DOWNLOAD</dt><dd>{formatBytes(installStatus.totalBytes)}</dd></div> : null}
           </dl>
           <span>Required files</span>
           <ul>
@@ -125,11 +195,50 @@ function EngineCapabilityCard({
               <li key={file}>{file}</li>
             ))}
           </ul>
-          <small>Keep the Hugging Face repository cache layout intact. Restart VibeSeq after the exact revision is installed.</small>
+          {desktopInstaller && installStatus?.supported && (
+            <div className="engine-model-downloader">
+              <label className="engine-license-consent">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  disabled={installing}
+                  onChange={(event) => setTermsAccepted(event.target.checked)}
+                />
+                <span>
+                  I agree to the{' '}
+                  <a href={installStatus.terms?.stability} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, installStatus.terms!.stability)}>Stability AI Community License</a>
+                  {' '}and{' '}
+                  <a href={installStatus.terms?.gemma} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, installStatus.terms!.gemma)}>Gemma Terms of Use</a>, including their use restrictions.
+                </span>
+              </label>
+              {(installing || installProgress) && (
+                <div className="engine-download-progress">
+                  <progress
+                    max={installProgress?.totalBytes || installStatus.totalBytes}
+                    value={installProgress?.downloadedBytes ?? installStatus.installedBytes}
+                    aria-label="Stable Audio model download progress"
+                  />
+                  <small>
+                    {formatBytes(installProgress?.downloadedBytes ?? installStatus.installedBytes)} / {formatBytes(installStatus.totalBytes)}
+                    {installProgress?.asset ? ` · ${installProgress.asset}` : ''}
+                  </small>
+                </div>
+              )}
+              {installError && <p className="engine-install-error" role="alert">{installError}</p>}
+              {installing ? (
+                <button type="button" className="secondary-button" onClick={() => void cancelInstallation()}><Square /> Cancel download</button>
+              ) : (
+                <button type="button" className="primary-button" disabled={!termsAccepted} onClick={() => void startInstallation()}><Download /> Download &amp; install {formatBytes(installStatus.totalBytes)}</button>
+              )}
+              <small>Downloads resume after interruption. Every part and final model file is SHA-256 verified before activation.</small>
+            </div>
+          )}
+          {!desktopInstaller && <small>Keep the Hugging Face repository cache layout intact. Restart VibeSeq after the exact revision is installed.</small>}
         </div>
       )}
 
       {capability?.license && <p className="engine-license">LICENSE · {capability.license}</p>}
+      {kind === 'generation' && selectedProvider === 'stable-audio-3' && <p className="engine-powered-by">Powered by Stability AI</p>}
     </section>
   )
 }
@@ -140,6 +249,7 @@ export function EngineDialog({
   transcriptionProvider,
   onGenerationProvider,
   onTranscriptionProvider,
+  onModelInstalled,
   onClose,
 }: EngineDialogProps) {
   const generationOptions = health?.selectableProviders?.generation ?? ['procedural-demo', 'stable-audio-3']
@@ -182,6 +292,7 @@ export function EngineDialog({
             selectedProvider={generationProvider}
             options={generationOptions}
             onProvider={onGenerationProvider}
+            onModelInstalled={onModelInstalled}
             modelCachePath={health?.storage?.modelCache}
           />
           <EngineCapabilityCard

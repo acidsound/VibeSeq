@@ -233,6 +233,7 @@ function App() {
   const activeJobRef = useRef<InferenceJob<unknown> | null>(null)
   const activeAbortRef = useRef<AbortController | null>(null)
   const [health, setHealth] = useState<InferenceHealth | null>(null)
+  const modelInstallPromptedRef = useRef(false)
   const [generationProvider, setGenerationProvider] = useState('procedural-demo')
   const [transcriptionProvider, setTranscriptionProvider] = useState('signal-demo')
   const [toast, setToast] = useState<string | null>(null)
@@ -434,15 +435,44 @@ function App() {
     })
   }
 
-  useEffect(() => {
-    const controller = new AbortController()
-    getInferenceHealth(controller.signal).then((nextHealth) => {
+  const refreshInferenceHealth = useCallback(async () => {
+    try {
+      const nextHealth = await getInferenceHealth()
       setHealth(nextHealth)
       setGenerationProvider(nextHealth.generation.provider)
       setTranscriptionProvider(nextHealth.transcription.provider)
-    }).catch(() => setHealth(null))
-    return () => controller.abort()
+    } catch {
+      setHealth(null)
+    }
   }, [])
+
+  useEffect(() => {
+    void refreshInferenceHealth()
+  }, [refreshInferenceHealth])
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refreshInferenceHealth()
+    }
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [refreshInferenceHealth])
+
+  useEffect(() => {
+    if (!window.vibeseqDesktop || health?.generation.provider !== 'stable-audio-3') return
+    if (health.generation.weightsCached === true) {
+      modelInstallPromptedRef.current = false
+      return
+    }
+    if (health.generation.weightsCached === false && !modelInstallPromptedRef.current) {
+      modelInstallPromptedRef.current = true
+      setSettingsOpen(true)
+    }
+  }, [health])
 
   useEffect(() => {
     let cancelled = false
@@ -2531,7 +2561,7 @@ function App() {
         onConfirm={() => void deleteLocalProject(projectDeleteTarget)}
       />}
       {exportOpen && <ExportDialog project={project} progress={mixExportProgress} onClose={closeExportDialog} onSampleRateChange={(sampleRate) => void mutate('Change project sample rate', (draft) => { draft.sampleRate = sampleRate }, 'project:sample-rate')} onExportMix={(scope, bitDepth, protectPeaks, sampleRate) => void exportMix(scope, bitDepth, protectPeaks, sampleRate)} onExportAllTracks={(bitDepth, protectPeaks, sampleRate) => void exportAllTracksZip(bitDepth, protectPeaks, sampleRate)} onCancelMix={cancelMixExport} onExportMidi={() => void exportMidi()} />}
-      {settingsOpen && <EngineDialog health={health} generationProvider={generationProvider} transcriptionProvider={transcriptionProvider} onGenerationProvider={setGenerationProvider} onTranscriptionProvider={setTranscriptionProvider} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <EngineDialog health={health} generationProvider={generationProvider} transcriptionProvider={transcriptionProvider} onGenerationProvider={setGenerationProvider} onTranscriptionProvider={setTranscriptionProvider} onModelInstalled={refreshInferenceHealth} onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

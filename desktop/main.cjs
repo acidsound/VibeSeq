@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, session } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, session, shell } = require('electron')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -11,6 +11,8 @@ const {
   resolveStorageRoot,
   sidecarStorageEnvironment,
 } = require('./storage-root.cjs')
+const { StableAudioModelInstaller } = require('./model-installer.cjs')
+const stableAudioManifest = require('./stable-audio-model-bundle.json')
 
 const ELECTRON_SERVER_START_PORT = 10_000
 const STARTUP_TIMEOUT_MS = 30_000
@@ -19,9 +21,50 @@ let mainWindow = null
 let sidecar = null
 let sidecarLog = null
 let quitting = false
+let modelInstallController = null
+let modelInstallPromise = null
 
 const storageRoot = resolveStorageRoot({ isPackaged: app.isPackaged })
 configureElectronStorage(app, storageRoot)
+
+const stableAudioInstaller = new StableAudioModelInstaller({
+  storageRoot,
+  manifest: stableAudioManifest,
+})
+
+ipcMain.handle('stable-audio:status', () => stableAudioInstaller.status())
+ipcMain.handle('stable-audio:install', async (_event, request) => {
+  if (request?.accepted !== true) {
+    throw new Error('Accept the Stable Audio and Gemma terms before downloading the model.')
+  }
+  if (modelInstallPromise) return modelInstallPromise
+  modelInstallController = new AbortController()
+  modelInstallPromise = stableAudioInstaller.install({
+    accepted: true,
+    signal: modelInstallController.signal,
+    onProgress: (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('stable-audio:progress', progress)
+      }
+    },
+  }).finally(() => {
+    modelInstallController = null
+    modelInstallPromise = null
+  })
+  return modelInstallPromise
+})
+ipcMain.handle('stable-audio:cancel', () => {
+  modelInstallController?.abort()
+  return { cancelled: Boolean(modelInstallController) }
+})
+ipcMain.handle('desktop:open-external', async (_event, value) => {
+  const url = new URL(String(value))
+  const allowedHosts = new Set(['ai.google.dev', 'github.com', 'huggingface.co', 'stability.ai'])
+  if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname)) {
+    throw new Error('VibeSeq refused to open an untrusted external URL.')
+  }
+  await shell.openExternal(url.toString())
+})
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
@@ -128,6 +171,7 @@ const createWindow = async (origin) => {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.cjs'),
       sandbox: true,
       webSecurity: true,
     },
@@ -170,6 +214,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => {
   quitting = true
+  modelInstallController?.abort()
   stopSidecar()
   sidecarLog?.end()
 })

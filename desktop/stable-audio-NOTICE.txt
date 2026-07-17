@@ -1,0 +1,11 @@
+This Stability AI Model is licensed under the Stability AI Community License,
+Copyright © Stability AI Ltd. All Rights Reserved.
+
+Powered by Stability AI.
+
+Gemma is provided under and subject to the Gemma Terms of Use found at
+ai.google.dev/gemma/terms.
+
+VibeSeq redistributes the unmodified Stable Audio 3 Medium optimized weights
+from stabilityai/stable-audio-3-optimized at revision
+c2949a435de2392fe49c5914c52bc174cfc05a9b.

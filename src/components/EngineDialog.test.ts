@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 
 import { createElement } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InferenceHealth } from '../api/inference'
 import { EngineDialog } from './EngineDialog'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  delete window.vibeseqDesktop
+})
 
 const blockedHealth = (): InferenceHealth => ({
   status: 'ok',
@@ -70,5 +73,61 @@ describe('EngineDialog model installation guidance', () => {
     expect(link.getAttribute('href')).toBe(
       'https://huggingface.co/stabilityai/stable-audio-3-optimized',
     )
+  })
+
+  it('downloads only the desktop OS bundle after explicit license acceptance', async () => {
+    const install = vi.fn().mockResolvedValue({
+      supported: true,
+      platformKey: 'darwin-arm64',
+      variantLabel: 'Apple Silicon · MLX',
+      installed: true,
+      installedBytes: 5_179_078_812,
+      totalBytes: 5_179_078_812,
+      revision: 'c2949a435de2392fe49c5914c52bc174cfc05a9b',
+    })
+    const onModelInstalled = vi.fn()
+    window.vibeseqDesktop = {
+      stableAudio: {
+        status: vi.fn().mockResolvedValue({
+          supported: true,
+          platformKey: 'darwin-arm64',
+          variantLabel: 'Apple Silicon · MLX',
+          installed: false,
+          installedBytes: 0,
+          totalBytes: 5_179_078_812,
+          minimumFreeBytes: 7_200_000_000,
+          revision: 'c2949a435de2392fe49c5914c52bc174cfc05a9b',
+          terms: {
+            stability: 'https://huggingface.co/stabilityai/stable-audio-3-optimized/blob/revision/LICENSE.md',
+            gemma: 'https://ai.google.dev/gemma/terms',
+            source: 'https://huggingface.co/stabilityai/stable-audio-3-optimized',
+          },
+        }),
+        install,
+        cancel: vi.fn().mockResolvedValue({ cancelled: true }),
+        onProgress: vi.fn(() => () => undefined),
+      },
+      openExternal: vi.fn().mockResolvedValue(undefined),
+    }
+
+    render(createElement(EngineDialog, {
+      health: blockedHealth(),
+      generationProvider: 'stable-audio-3',
+      transcriptionProvider: 'muscriptor',
+      onGenerationProvider: vi.fn(),
+      onTranscriptionProvider: vi.fn(),
+      onModelInstalled,
+      onClose: vi.fn(),
+    }))
+
+    const download = await screen.findByRole('button', { name: /Download & install 5.18 GB/ })
+    expect(download.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox'))
+    expect(download.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(download)
+
+    await waitFor(() => expect(install).toHaveBeenCalledWith(true))
+    await waitFor(() => expect(onModelInstalled).toHaveBeenCalledOnce())
+    expect(screen.getByText('Apple Silicon · MLX')).not.toBeNull()
   })
 })

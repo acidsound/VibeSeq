@@ -8,7 +8,11 @@ directories:
   buildResources: build
 files:
   - desktop/main.cjs
+  - desktop/model-installer.cjs
   - desktop/port-selection.cjs
+  - desktop/preload.cjs
+  - desktop/stable-audio-model-bundle.json
+  - desktop/stable-audio-NOTICE.txt
   - desktop/storage-root.cjs
 extraResources:
   - from: dist

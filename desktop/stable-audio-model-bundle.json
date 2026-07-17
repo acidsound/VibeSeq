@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "bundleId": "stable-audio-3-optimized-c2949a",
+  "modelId": "stabilityai/stable-audio-3-optimized",
+  "revision": "c2949a435de2392fe49c5914c52bc174cfc05a9b",
+  "release": {
+    "repository": "acidsound/VibeSeq"
+  },
+  "terms": {
+    "stability": "https://huggingface.co/stabilityai/stable-audio-3-optimized/blob/c2949a435de2392fe49c5914c52bc174cfc05a9b/LICENSE.md",
+    "gemma": "https://ai.google.dev/gemma/terms",
+    "source": "https://huggingface.co/stabilityai/stable-audio-3-optimized/tree/c2949a435de2392fe49c5914c52bc174cfc05a9b"
+  },
+  "commonFiles": [
+    {
+      "destination": "LICENSE_GEMMA.md",
+      "size": 10541,
+      "sha256": "e77acc0d3163bb7534675045c584b4d04b387b529239fc4b3647da0a01ba4745",
+      "parts": [
+        { "asset": "LICENSE-Gemma.md", "size": 10541, "sha256": "e77acc0d3163bb7534675045c584b4d04b387b529239fc4b3647da0a01ba4745" }
+      ]
+    },
+    {
+      "destination": "LICENSE.md",
+      "size": 11852,
+      "sha256": "d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d",
+      "parts": [
+        { "asset": "LICENSE-Stability-AI-Community.md", "size": 11852, "sha256": "d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d" }
+      ]
+    },
+    {
+      "destination": "NOTICE.txt",
+      "size": 429,
+      "sha256": "dcf0608ba45502def866de4fb31080194da9fc5e6ba8849cecea8ca023676471",
+      "parts": [
+        { "asset": "NOTICE.txt", "size": 429, "sha256": "dcf0608ba45502def866de4fb31080194da9fc5e6ba8849cecea8ca023676471" }
+      ]
+    }
+  ],
+  "variants": {
+    "darwin-arm64": {
+      "label": "Apple Silicon · MLX",
+      "release": {
+        "tag": "stable-audio-3-c2949a-macos-arm64",
+        "baseUrl": "https://github.com/acidsound/VibeSeq/releases/download/stable-audio-3-c2949a-macos-arm64"
+      },
+      "downloadBytes": 5179078812,
+      "minimumFreeBytes": 7200000000,
+      "files": [
+        {
+          "destination": "MLX/dit_medium_f16.npz",
+          "size": 2907300946,
+          "sha256": "f9e5647ea3225818657d47d47ae4b34afa29c0568206ca89566c1a758944a38e",
+          "parts": [
+            { "asset": "sa3-c2949a-mlx-dit-medium-f16.part-000", "size": 1900000000, "sha256": "655cc0e207380576d3cb625984b6a2b28709d9b183fa0dd767ccccb08ce26904" },
+            { "asset": "sa3-c2949a-mlx-dit-medium-f16.part-001", "size": 1007300946, "sha256": "275e77f1599ccb89670fdd3653c765efebf2ac1fd976b6a1d9e220150a0151ab" }
+          ]
+        },
+        {
+          "destination": "MLX/same_l_decoder_f32.npz",
+          "size": 1704311976,
+          "sha256": "84924be2122d3a20fce443f40b782d9cd88e8e73707476326003ac47659a2287",
+          "parts": [
+            { "asset": "sa3-c2949a-mlx-same-l-decoder-f32.npz", "size": 1704311976, "sha256": "84924be2122d3a20fce443f40b782d9cd88e8e73707476326003ac47659a2287" }
+          ]
+        },
+        {
+          "destination": "MLX/t5gemma_f16.npz",
+          "size": 567443068,
+          "sha256": "8deb20489f36d9aec539f26c9c67321f99bc5fe300d470435ed6e76be4f16bbd",
+          "parts": [
+            { "asset": "sa3-c2949a-mlx-t5gemma-f16.npz", "size": 567443068, "sha256": "8deb20489f36d9aec539f26c9c67321f99bc5fe300d470435ed6e76be4f16bbd" }
+          ]
+        }
+      ]
+    },
+    "win32-x64": {
+      "label": "Windows x64 · LiteRT CPU",
+      "release": {
+        "tag": "stable-audio-3-c2949a-windows-x64",
+        "baseUrl": "https://github.com/acidsound/VibeSeq/releases/download/stable-audio-3-c2949a-windows-x64"
+      },
+      "downloadBytes": 2582232150,
+      "minimumFreeBytes": 4500000000,
+      "files": [
+        {
+          "destination": "tflite/sa3-m/dit_w8a8-dyn.tflite",
+          "size": 1469163200,
+          "sha256": "3feea38f595c12edb785f87225a243bfacc33866ecdcf76fb2766cb9e9d153c5",
+          "parts": [
+            { "asset": "sa3-c2949a-tflite-dit-w8a8-dyn.tflite", "size": 1469163200, "sha256": "3feea38f595c12edb785f87225a243bfacc33866ecdcf76fb2766cb9e9d153c5" }
+          ]
+        },
+        {
+          "destination": "tflite/same-l/dec_w8a8-dyn.tflite",
+          "size": 549227520,
+          "sha256": "6d6b88b418e51aa4bd18e1fdf26c81a013932b327458b3bcc130c3d1e819513e",
+          "parts": [
+            { "asset": "sa3-c2949a-tflite-same-l-dec-w8a8-dyn.tflite", "size": 549227520, "sha256": "6d6b88b418e51aa4bd18e1fdf26c81a013932b327458b3bcc130c3d1e819513e" }
+          ]
+        },
+        {
+          "destination": "tflite/t5gemma/encoder_fp16.tflite",
+          "size": 563818608,
+          "sha256": "8530d0b3e6b9b9dcf1239145c2a853fb749708eaddbb472ff8f0802b50059372",
+          "parts": [
+            { "asset": "sa3-c2949a-tflite-t5gemma-encoder-fp16.tflite", "size": 563818608, "sha256": "8530d0b3e6b9b9dcf1239145c2a853fb749708eaddbb472ff8f0802b50059372" }
+          ]
+        }
+      ]
+    }
+  }
+}
