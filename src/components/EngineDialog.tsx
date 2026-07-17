@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, Download, ExternalLink, MonitorCog, Save, Square, X } from 'lucide-react'
+import { CircleAlert, CircleCheck, Download, ExternalLink, FileCheck2, FolderOpen, MonitorCog, Save, Square, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { EngineCapability, InferenceHealth } from '../api/inference'
 import { useModalFocus } from '../hooks/useModalFocus'
@@ -76,11 +76,17 @@ function EngineCapabilityCard({
   const desktopInstaller = kind === 'generation' && selectedProvider === 'stable-audio-3'
     ? window.vibeseqDesktop?.stableAudio
     : undefined
+  const desktopMuscriptorVerifier = kind === 'transcription' && selectedProvider === 'muscriptor'
+    ? window.vibeseqDesktop?.muscriptor
+    : undefined
+  const desktopModelCache = window.vibeseqDesktop?.modelCache
   const [installStatus, setInstallStatus] = useState<StableAudioInstallStatus | null>(null)
   const [installProgress, setInstallProgress] = useState<StableAudioInstallProgress | null>(null)
   const [installing, setInstalling] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [installError, setInstallError] = useState<string | null>(null)
+  const [verifyingMuscriptor, setVerifyingMuscriptor] = useState(false)
+  const [muscriptorVerifyError, setMuscriptorVerifyError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!desktopInstaller || capability?.weightsCached !== false) return
@@ -127,6 +133,47 @@ function EngineCapabilityCard({
     await desktopInstaller?.cancel()
   }
 
+  const verifyMuscriptorFiles = async () => {
+    if (!desktopMuscriptorVerifier) return
+    setVerifyingMuscriptor(true)
+    setMuscriptorVerifyError(null)
+    try {
+      const result = await desktopMuscriptorVerifier.verifyCache()
+      if (result.verified) await onModelInstalled?.()
+    } catch {
+      setMuscriptorVerifyError('Verification failed. Check that config.json and model.safetensors are directly inside SAVE CACHE UNDER, then try again.')
+    } finally {
+      setVerifyingMuscriptor(false)
+    }
+  }
+
+  const muscriptorRevision = capability?.bootstrap?.revision || capability?.modelRevision
+  const muscriptorRepository = capability?.bootstrap?.modelId || capability?.modelId
+  const muscriptorRevisionRoot = muscriptorRepository && muscriptorRevision
+    ? `https://huggingface.co/${muscriptorRepository}/blob/${muscriptorRevision}`
+    : null
+  const cacheSeparator = modelCachePath?.includes('\\') ? '\\' : '/'
+  const muscriptorCachePath = desktopMuscriptorVerifier && modelCachePath && muscriptorRepository && muscriptorRevision
+    ? [
+        modelCachePath.replace(/[\\/]+$/, ''),
+        `models--${muscriptorRepository.replaceAll('/', '--')}`,
+        'snapshots',
+        muscriptorRevision,
+      ].join(cacheSeparator)
+    : null
+  const displayedCachePath = muscriptorCachePath || modelCachePath
+  const openCacheDirectory = async () => {
+    try {
+      if (desktopMuscriptorVerifier) await desktopMuscriptorVerifier.openCacheFolder()
+      else await desktopModelCache?.open()
+    } catch {
+      if (desktopMuscriptorVerifier) setMuscriptorVerifyError('Could not open SAVE CACHE UNDER. Check that the VibeSeq Data directory is writable.')
+      else setInstallError('Could not open the model cache folder.')
+    }
+  }
+  const showGenericActions = presentation.actions.length > 0
+    && !(desktopMuscriptorVerifier && capability?.weightsCached === false)
+
   return (
     <section className={`engine-capability-card ${statusClass}`} aria-label={`${title} readiness`}>
       <div className="engine-capability-heading">
@@ -163,7 +210,7 @@ function EngineCapabilityCard({
 
       <p className="engine-reason">{presentation.reason}</p>
 
-      {presentation.actions.length > 0 && (
+      {showGenericActions && (
         <div className="engine-actions" role="note" aria-label={`${title} required actions`}>
           <b>REQUIRED</b>
           <ul>{presentation.actions.map((action) => <li key={action}>{action}</li>)}</ul>
@@ -182,10 +229,25 @@ function EngineCapabilityCard({
 
       {capability?.weightsCached === false && capability.bootstrap && (
         <div className="engine-model-install" role="note" aria-label={`${title} model installation`}>
-          <b>MODEL INSTALL</b>
+          <b>{desktopMuscriptorVerifier ? 'VERIFY MODEL FILES' : 'MODEL INSTALL'}</b>
           <dl>
             <div><dt>FROM</dt><dd>{capability.bootstrap.modelId}@{capability.bootstrap.revision}</dd></div>
-            <div><dt>SAVE CACHE UNDER</dt><dd>{modelCachePath || 'Model cache path not reported'}</dd></div>
+            <div>
+              <dt>SAVE CACHE UNDER</dt>
+              <dd>
+                {(desktopMuscriptorVerifier || desktopModelCache) && displayedCachePath ? (
+                  <button
+                    type="button"
+                    className="engine-cache-path"
+                    title="Open model cache folder"
+                    aria-label="Open model cache folder"
+                    onClick={() => void openCacheDirectory()}
+                  >
+                    <span>{displayedCachePath}</span><FolderOpen aria-hidden="true" />
+                  </button>
+                ) : displayedCachePath || 'Model cache path not reported'}
+              </dd>
+            </div>
             {installStatus?.variantLabel && <div><dt>THIS OS</dt><dd>{installStatus.variantLabel}</dd></div>}
             {installStatus?.totalBytes ? <div><dt>DOWNLOAD</dt><dd>{formatBytes(installStatus.totalBytes)}</dd></div> : null}
           </dl>
@@ -233,7 +295,30 @@ function EngineCapabilityCard({
               <small>Downloads resume after interruption. Every part and final model file is SHA-256 verified before activation.</small>
             </div>
           )}
-          {!desktopInstaller && <small>Keep the Hugging Face repository cache layout intact. Restart VibeSeq after the exact revision is installed.</small>}
+          {desktopMuscriptorVerifier && muscriptorRevisionRoot && (
+            <div className="engine-gated-installer">
+              <ol>
+                <li>
+                  Sign in to Hugging Face, open the{' '}
+                  <a href={capability.bootstrap?.accessUrl} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, capability.bootstrap!.accessUrl!)}>MuScriptor access form</a>,
+                  {' '}fill in the requested fields, and accept its gated conditions.
+                </li>
+                <li>
+                  From the pinned revision, download{' '}
+                  <a href={`${muscriptorRevisionRoot}/config.json`} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, `${muscriptorRevisionRoot}/config.json`)}>config.json</a>
+                  {' '}and{' '}
+                  <a href={`${muscriptorRevisionRoot}/model.safetensors`} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, `${muscriptorRevisionRoot}/model.safetensors`)}>model.safetensors</a>.
+                </li>
+                <li>Click SAVE CACHE UNDER to open the exact folder, place both downloaded files directly inside it, then verify the cache below.</li>
+              </ol>
+              {muscriptorVerifyError && <p className="engine-install-error" role="alert">{muscriptorVerifyError}</p>}
+              <button type="button" className="primary-button" disabled={verifyingMuscriptor} onClick={() => void verifyMuscriptorFiles()}>
+                <FileCheck2 /> {verifyingMuscriptor ? 'Verifying MuScriptor cache…' : 'Verify files in cache'}
+              </button>
+              <small>VibeSeq does not download, select, or move MuScriptor files and never asks for your Hugging Face token. It only verifies the two files already under SAVE CACHE UNDER. MuScriptor remains subject to CC BY-NC 4.0 and its gated conditions.</small>
+            </div>
+          )}
+          {!desktopInstaller && !desktopMuscriptorVerifier && <small>Keep the Hugging Face repository cache layout intact. Restart VibeSeq after the exact revision is installed.</small>}
         </div>
       )}
 
@@ -302,6 +387,7 @@ export function EngineDialog({
             selectedProvider={transcriptionProvider}
             options={transcriptionOptions}
             onProvider={onTranscriptionProvider}
+            onModelInstalled={onModelInstalled}
             modelCachePath={health?.storage?.modelCache}
           />
         </div>

@@ -6,7 +6,7 @@ validation.
 ## Artifacts
 
 A tag matching `v*` runs `.github/workflows/desktop-release.yml` and publishes a
-private GitHub prerelease containing:
+GitHub prerelease containing:
 
 - `VibeSeq-<version>-Windows-x64.exe`: portable Windows executable.
 - `VibeSeq-<version>-macOS-arm64.dmg`: Apple Silicon disk image.
@@ -71,8 +71,20 @@ after installation. The default cache roots are:
 - Windows portable: `VibeSeq Data/models/huggingface/hub` beside
   `VibeSeq.exe`
 
-MuScriptor remains gated. Each user must obtain access from its official model
-page; VibeSeq does not redistribute or bypass gated weights.
+MuScriptor remains gated. Each user must sign in on its official model page,
+complete the access form, and accept the model conditions. The Inference
+readiness panel then links directly to the pinned `config.json` and
+`model.safetensors`. **SAVE CACHE UNDER** opens the exact pinned snapshot in
+Finder or File Explorer. The user places both downloaded files directly in that
+folder, then **Verify files in cache** checks their names, sizes, MuScriptor
+config, and safetensors structure. VibeSeq does not download, select, or move
+these gated files, ask for or store a Hugging Face token, redistribute the
+weights, or bypass the gate. A failed verification tells the user to check the
+two files under the displayed cache path and try again.
+
+The cache path shown after **SAVE CACHE UNDER** is clickable in desktop builds.
+For MuScriptor it is the exact revision snapshot; VibeSeq creates the directory
+if needed and opens it in Finder or File Explorer.
 
 The builds are unsigned. Windows SmartScreen and macOS Gatekeeper may warn until
 code-signing identities are configured. Do not describe an unsigned prerelease

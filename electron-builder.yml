@@ -9,6 +9,8 @@ directories:
 files:
   - desktop/main.cjs
   - desktop/model-installer.cjs
+  - desktop/muscriptor-importer.cjs
+  - desktop/muscriptor-model-bundle.json
   - desktop/port-selection.cjs
   - desktop/preload.cjs
   - desktop/stable-audio-model-bundle.json

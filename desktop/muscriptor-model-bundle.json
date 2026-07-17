@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "modelId": "MuScriptor/muscriptor-medium",
+  "revision": "f32236969308476e01fd3aae67357de5feb05a2d",
+  "accessUrl": "https://huggingface.co/MuScriptor/muscriptor-medium",
+  "filesUrl": "https://huggingface.co/MuScriptor/muscriptor-medium/tree/f32236969308476e01fd3aae67357de5feb05a2d",
+  "files": [
+    {
+      "name": "config.json",
+      "size": 126,
+      "kind": "config",
+      "modelType": "muscriptor"
+    },
+    {
+      "name": "model.safetensors",
+      "size": 1228144472,
+      "kind": "safetensors",
+      "dtype": "F32",
+      "parameterCount": 307030528
+    }
+  ]
+}

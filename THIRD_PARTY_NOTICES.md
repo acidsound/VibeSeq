@@ -33,6 +33,10 @@ Stable Audio 3 and MuScriptor weights are not committed to this repository.
 VibeSeq redistributes only the pinned Stable Audio 3 optimized files through
 separate macOS and Windows GitHub Releases; the in-app installer also installs
 the Stability AI Community License, Gemma Terms, and required notice.
-MuScriptor is not redistributed. Pinned identifiers, applicable upstream terms,
-and its commercial-use blocker are recorded in
-`docs/product/verified-slice.md` and `server/README.md`.
+MuScriptor is not redistributed. Each user accepts the upstream gate, downloads
+`config.json` and `model.safetensors` from the pinned official revision, and
+places them in the displayed cache directory. VibeSeq only validates those
+cached files; it does not download, select, or move them or request or store a
+Hugging Face token. Pinned identifiers, applicable upstream terms, and its
+commercial-use blocker are recorded in `docs/product/verified-slice.md` and
+`server/README.md`.

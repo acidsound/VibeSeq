@@ -13,6 +13,8 @@ const {
 } = require('./storage-root.cjs')
 const { StableAudioModelInstaller } = require('./model-installer.cjs')
 const stableAudioManifest = require('./stable-audio-model-bundle.json')
+const { MuscriptorCacheVerifier } = require('./muscriptor-importer.cjs')
+const muscriptorManifest = require('./muscriptor-model-bundle.json')
 
 const ELECTRON_SERVER_START_PORT = 10_000
 const STARTUP_TIMEOUT_MS = 30_000
@@ -30,6 +32,10 @@ configureElectronStorage(app, storageRoot)
 const stableAudioInstaller = new StableAudioModelInstaller({
   storageRoot,
   manifest: stableAudioManifest,
+})
+const muscriptorCacheVerifier = new MuscriptorCacheVerifier({
+  storageRoot,
+  manifest: muscriptorManifest,
 })
 
 ipcMain.handle('stable-audio:status', () => stableAudioInstaller.status())
@@ -56,6 +62,20 @@ ipcMain.handle('stable-audio:install', async (_event, request) => {
 ipcMain.handle('stable-audio:cancel', () => {
   modelInstallController?.abort()
   return { cancelled: Boolean(modelInstallController) }
+})
+ipcMain.handle('muscriptor:verify-cache', () => muscriptorCacheVerifier.verify())
+ipcMain.handle('muscriptor:open-cache', async () => {
+  const modelCache = await muscriptorCacheVerifier.ensureCacheDirectory()
+  const error = await shell.openPath(modelCache)
+  if (error) throw new Error(`Could not open the MuScriptor cache folder: ${error}`)
+  return { path: modelCache }
+})
+ipcMain.handle('desktop:open-model-cache', async () => {
+  const modelCache = path.join(storageRoot, 'models', 'huggingface', 'hub')
+  fs.mkdirSync(modelCache, { recursive: true })
+  const error = await shell.openPath(modelCache)
+  if (error) throw new Error(`Could not open the model cache folder: ${error}`)
+  return { path: modelCache }
 })
 ipcMain.handle('desktop:open-external', async (_event, value) => {
   const url = new URL(String(value))

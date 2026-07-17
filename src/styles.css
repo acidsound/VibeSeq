@@ -706,6 +706,10 @@ svg { display: block; }
 .engine-model-install dl > div { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 6px; }
 .engine-model-install dt { color: var(--text-faint); font-family: 'IBM Plex Mono', monospace; font-size: 6px; }
 .engine-model-install dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; font-size: 7px; }
+.engine-cache-path { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 5px; padding: 0; border: 0; color: var(--midi); background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.engine-cache-path span { min-width: 0; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: rgb(93 214 209 / 0.36); text-underline-offset: 2px; }
+.engine-cache-path svg { width: 10px; height: 10px; flex: 0 0 auto; }
+.engine-cache-path:hover span, .engine-cache-path:focus-visible span { text-decoration-color: currentColor; }
 .engine-model-install ul { display: grid; gap: 3px; margin: 0; padding-left: 14px; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; font-size: 6px; overflow-wrap: anywhere; }
 .engine-model-install small { color: var(--text-faint); font-size: 6px; line-height: 1.45; }
 .engine-model-downloader { display: grid; gap: 7px; padding-top: 7px; border-top: 1px solid rgb(93 214 209 / 0.14); }
@@ -718,6 +722,12 @@ svg { display: block; }
 .engine-model-downloader > button { min-height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border-radius: var(--radius-sm); font-size: 8px; }
 .engine-model-downloader > button svg { width: 12px; }
 .engine-model-downloader > button:disabled { opacity: .4; cursor: not-allowed; }
+.engine-gated-installer { display: grid; gap: 8px; padding-top: 7px; border-top: 1px solid rgb(93 214 209 / 0.14); }
+.engine-gated-installer ol { display: grid; gap: 6px; margin: 0; padding-left: 17px; color: var(--text-dim); font-size: 7px; line-height: 1.45; }
+.engine-gated-installer a { color: var(--midi); text-decoration: underline; text-underline-offset: 2px; }
+.engine-gated-installer > button { min-height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border-radius: var(--radius-sm); font-size: 8px; }
+.engine-gated-installer > button svg { width: 12px; }
+.engine-gated-installer > button:disabled { opacity: .5; cursor: wait; }
 .engine-install-error { margin: 0; padding: 6px; border: 1px solid rgb(240 120 104 / 0.24); border-radius: 3px; color: var(--danger); background: rgb(240 120 104 / 0.04); font-size: 7px; line-height: 1.4; }
 .engine-license { margin: 0; color: var(--text-faint); font-family: 'IBM Plex Mono', monospace; font-size: 6px; line-height: 1.4; }
 .engine-powered-by { margin: 0; color: var(--midi); font-family: 'IBM Plex Mono', monospace; font-size: 6px; letter-spacing: .06em; }

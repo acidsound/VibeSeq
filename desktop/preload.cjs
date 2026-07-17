@@ -11,5 +11,12 @@ contextBridge.exposeInMainWorld('vibeseqDesktop', {
       return () => ipcRenderer.removeListener('stable-audio:progress', handler)
     },
   },
+  muscriptor: {
+    verifyCache: () => ipcRenderer.invoke('muscriptor:verify-cache'),
+    openCacheFolder: () => ipcRenderer.invoke('muscriptor:open-cache'),
+  },
+  modelCache: {
+    open: () => ipcRenderer.invoke('desktop:open-model-cache'),
+  },
   openExternal: (url) => ipcRenderer.invoke('desktop:open-external', url),
 })

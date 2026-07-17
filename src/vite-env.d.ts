@@ -26,6 +26,14 @@ type StableAudioInstallProgress = {
   totalBytes: number
 }
 
+type MuscriptorVerifyResult = {
+  verified: boolean
+  modelId?: string
+  revision?: string
+  cacheDirectory?: string
+  files?: string[]
+}
+
 interface Window {
   vibeseqDesktop?: {
     stableAudio: {
@@ -33,6 +41,13 @@ interface Window {
       install: (accepted: boolean) => Promise<StableAudioInstallStatus>
       cancel: () => Promise<{ cancelled: boolean }>
       onProgress: (listener: (progress: StableAudioInstallProgress) => void) => () => void
+    }
+    muscriptor: {
+      verifyCache: () => Promise<MuscriptorVerifyResult>
+      openCacheFolder: () => Promise<{ path: string }>
+    }
+    modelCache: {
+      open: () => Promise<{ path: string }>
     }
     openExternal: (url: string) => Promise<void>
   }

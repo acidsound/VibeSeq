@@ -79,7 +79,9 @@ jobs:
           - Windows x64 TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-windows-x64
           - MuScriptor Medium: https://huggingface.co/MuScriptor/muscriptor-medium
 
-          Only the model format for the running OS is downloaded. macOS stores it below `~/VibeSeq Data/models`; the Windows portable build stores it below `VibeSeq Data/models` beside `VibeSeq.exe`. MuScriptor remains gated and is not redistributed.
+          Only the Stable Audio model format for the running OS is downloaded. macOS stores it below `~/VibeSeq Data/models`; the Windows portable build stores it below `VibeSeq Data/models` beside `VibeSeq.exe`.
+
+          MuScriptor remains gated and is not redistributed. Each user accepts its Hugging Face conditions, downloads the pinned `config.json` and `model.safetensors` in their browser, and places them directly under **SAVE CACHE UNDER**. That exact revision folder opens in Finder or File Explorer. VibeSeq does not download, select, or move these files or request or store a Hugging Face token; **Verify files in cache** only validates the files already in that folder.
 
           Powered by Stability AI.
 
