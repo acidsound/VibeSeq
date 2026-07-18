@@ -26,6 +26,7 @@ from vibeseq_inference.providers.factory import (
     generation_provider,
     transcription_provider,
 )
+from vibeseq_inference.providers.base import ProviderUnavailable
 from vibeseq_inference.providers.stable_audio import (
     StableAudio3Provider,
     _pinned_stable_audio_files,
@@ -585,6 +586,65 @@ def test_stable_audio_gpu_failure_falls_back_once_to_exact_medium_cpu(
     assert artifact.route == "cpu-tflite"
     assert artifact.model == "medium"
     assert artifact.model_id == "stabilityai/stable-audio-3-optimized"
+
+
+def test_stable_audio_unavailable_cuda_route_falls_back_to_cpu_tflite(
+    tmp_path: Path, monkeypatch
+) -> None:
+    routes = (
+        RuntimeRoute(
+            id="cuda-ampere-fa2",
+            runtime="pytorch-fa2",
+            device="cuda",
+            artifact_key="stable-audio-3-medium-pytorch",
+            required_modules=("stable_audio_3", "flash_attn"),
+            required_files=("model.safetensors",),
+        ),
+        RuntimeRoute(
+            id="cpu-tflite",
+            runtime="tflite-w8a8-dyn",
+            device="cpu",
+            artifact_key="stable-audio-3-medium-optimized",
+            required_modules=("ai_edge_litert",),
+            required_files=("tflite/sa3-m/dit_w8a8-dyn.tflite",),
+        ),
+    )
+    monkeypatch.setattr(
+        "vibeseq_inference.providers.stable_audio.stable_audio_execution_routes",
+        lambda *_, **__: routes,
+    )
+    attempts: list[str] = []
+
+    def unavailable_cuda(self, route):
+        attempts.append(route.id)
+        raise ProviderUnavailable("flash-attn is not bundled")
+
+    def run_cpu(**kwargs):
+        attempts.append("cpu-tflite")
+        sample_rate = 44_100
+        samples = np.zeros((round(kwargs["duration"] * sample_rate), 2), dtype="<i2")
+        import wave
+
+        with wave.open(str(kwargs["output_path"]), "wb") as handle:
+            handle.setnchannels(2)
+            handle.setsampwidth(2)
+            handle.setframerate(sample_rate)
+            handle.writeframes(samples.tobytes())
+        return TfliteGenerationResult(0.5, 0.5, False, 0.0, 8, "w8a8-dyn", 8)
+
+    monkeypatch.setattr(StableAudio3Provider, "_load", unavailable_cuda)
+    monkeypatch.setattr(
+        "vibeseq_inference.providers.stable_audio.run_tflite_generation", run_cpu
+    )
+    artifact = StableAudio3Provider("medium").generate(
+        GenerateRequest(prompt="fallback", duration=0.25, bpm=120, seed=13),
+        tmp_path / "fallback-cpu.wav",
+        lambda _: None,
+        lambda: False,
+    )
+    assert attempts == ["cuda-ampere-fa2", "cpu-tflite"]
+    assert artifact.route == "cpu-tflite"
+    assert artifact.device == "cpu"
 
 
 def test_stable_audio_resolver_pins_checkpoint_and_text_encoder(

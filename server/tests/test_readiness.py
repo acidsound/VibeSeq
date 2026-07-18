@@ -169,6 +169,31 @@ def test_cpu_tflite_is_ready_only_with_exact_code_packages_and_weights(
     ]
 
 
+def test_cpu_tflite_reports_only_the_packages_that_are_actually_missing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.module_installed",
+        lambda name: name != "sentencepiece",
+    )
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.cached_files",
+        lambda *_: (True, ()),
+    )
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.tflite_code_cached",
+        lambda: True,
+    )
+    status = generation_capability(
+        real_settings(tmp_path),
+        probe=HardwareProbe("Windows", "AMD64", False, None, None, False),
+    )
+    assert status["route"] == "cpu-tflite"
+    assert status["packageInstalled"] is False
+    assert status["missingPackages"] == ["sentencepiece"]
+    assert status["reason"] == "Missing runtime package(s): sentencepiece"
+
+
 def test_force_cpu_readiness_exposes_only_cpu_routes_on_apple_silicon(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -214,6 +239,39 @@ def test_ampere_route_becomes_ready_only_with_exact_cached_weights(
     assert status["codeRevision"] == STABLE_AUDIO_3_MEDIUM.code_revision
     assert status["ready"] is True
     assert status["available"] is True
+
+
+def test_windows_ampere_selects_ready_cpu_tflite_fallback(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.module_installed",
+        lambda name: name != "flash_attn",
+    )
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.cached_files",
+        lambda artifact, *_: (
+            (True, ())
+            if artifact.key == "stable-audio-3-medium-optimized"
+            else (False, artifact.files)
+        ),
+    )
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.tflite_code_cached",
+        lambda: True,
+    )
+    status = generation_capability(
+        real_settings(tmp_path),
+        probe=HardwareProbe(
+            "Windows", "AMD64", True, (8, 9), "NVIDIA GeForce RTX 4090", False
+        ),
+    )
+    assert status["preferredRoute"] == "cuda-ampere-fa2"
+    assert status["routePriority"] == ["cuda-ampere-fa2", "cpu-tflite"]
+    assert status["route"] == "cpu-tflite"
+    assert status["runtime"] == "tflite-w8a8-dyn"
+    assert status["device"] == "cpu"
+    assert status["ready"] is True
 
 
 def test_t4_sdpa_is_provisional_and_disabled_by_default(

@@ -76,7 +76,8 @@ describe('engine health presentation', () => {
       gated: true,
       accessGranted: null,
       packageInstalled: false,
-      requiredPackages: ['mlx'],
+      missingPackages: ['sentencepiece'],
+      requiredPackages: ['mlx', 'sentencepiece', 'huggingface_hub'],
       weightsCached: false,
       codeCached: false,
       missingFiles: ['MLX/dit_medium_f16.npz'],
@@ -90,7 +91,7 @@ describe('engine health presentation', () => {
     expect(presentation.actions).toEqual(expect.arrayContaining([
       expect.stringContaining('Approve gated access'),
       expect.stringContaining('Cache the exact source checkout'),
-      expect.stringContaining('Install required runtime packages: mlx'),
+      expect.stringContaining('Install required runtime packages: sentencepiece'),
       expect.stringContaining('Cache 1 missing file'),
       expect.stringContaining('adapter is not executable'),
       expect.stringContaining('Execution is disabled'),

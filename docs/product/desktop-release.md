@@ -19,6 +19,11 @@ target machine. The Electron renderer has no Node integration, uses context
 isolation and the Chromium sandbox, and can navigate only within its randomly
 allocated loopback origin.
 
+Every desktop release runs the frozen sidecar with `--vibeseq-check-runtime`
+before packaging succeeds. This imports the native LiteRT interpreter,
+SentencePiece, and Hugging Face Hub from the bundle itself, so a clean target
+machine never needs to install those packages into a system Python environment.
+
 ## Storage root
 
 VibeSeq keeps large and durable data out of opaque operating-system caches.
@@ -52,6 +57,11 @@ an unusable runtime format:
   approximately 5.18 GB.
 - `stable-audio-3-c2949a-windows-x64`: TFLite Medium weights for Windows CPU,
   approximately 2.58 GB.
+
+The Windows release provisions this TFLite CPU format even when an NVIDIA GPU
+is present. If a separately cached CUDA/FlashAttention route is unavailable,
+generation falls back to the verified TFLite route; a CPU-only Windows host
+selects that route directly. Neither case substitutes a smaller model.
 
 Both are fixed GitHub Releases rather than `latest` aliases. The app bundles an
 immutable manifest containing the release asset names, sizes, and digests. The

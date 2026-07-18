@@ -1,17 +1,24 @@
 from importlib.util import find_spec
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 
 project_root = Path(SPECPATH).parent
+litert_datas, litert_binaries, litert_hidden_imports = collect_all("ai_edge_litert")
+sentencepiece_datas, sentencepiece_binaries, sentencepiece_hidden_imports = collect_all(
+    "sentencepiece"
+)
 hidden_imports = sorted(
     set(
         [
             "vibeseq_inference.app",
             "vibeseq_inference.stable_audio_mlx_worker",
             "vibeseq_inference.stable_audio_tflite_worker",
+            "huggingface_hub",
         ]
+        + litert_hidden_imports
+        + sentencepiece_hidden_imports
         + collect_submodules("uvicorn")
         + collect_submodules("mlx")
     )
@@ -42,8 +49,13 @@ if mlx_root is not None:
 analysis = Analysis(
     [str(project_root / "desktop" / "sidecar_entry.py")],
     pathex=[str(project_root / "server")],
-    binaries=mlx_binaries,
-    datas=[(str(bundled_runtime), "stable-audio-3-runtime"), *mlx_datas],
+    binaries=[*mlx_binaries, *litert_binaries, *sentencepiece_binaries],
+    datas=[
+        (str(bundled_runtime), "stable-audio-3-runtime"),
+        *mlx_datas,
+        *litert_datas,
+        *sentencepiece_datas,
+    ],
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},

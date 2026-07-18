@@ -35,6 +35,7 @@ export type EngineCapability = {
   adapterImplemented?: boolean
   executionEnabled?: boolean
   missingFiles?: string[]
+  missingPackages?: string[]
   requiredPackages?: string[]
   bootstrap?: EngineBootstrap
   reason?: string

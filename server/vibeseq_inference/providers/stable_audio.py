@@ -292,8 +292,6 @@ class StableAudio3Provider:
                 )
             except JobCancelled:
                 raise
-            except ProviderUnavailable:
-                raise
             except Exception as exc:
                 failures.append(f"{route.id} ({_short_error(exc)})")
                 self._evict(route)

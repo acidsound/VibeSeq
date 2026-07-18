@@ -70,7 +70,9 @@ const blockingActions = (capability: EngineCapability): string[] => {
     actions.push(`Approve gated access for ${capability.modelId || capability.model}, then cache this exact revision.`)
   }
   if (capability.packageInstalled === false) {
-    const packages = capability.requiredPackages?.join(', ') || 'the reported runtime packages'
+    const packages = (capability.missingPackages?.length
+      ? capability.missingPackages
+      : capability.requiredPackages)?.join(', ') || 'the reported runtime packages'
     actions.push(`Install required runtime packages: ${packages}.`)
   }
   if (capability.weightsCached === false) {

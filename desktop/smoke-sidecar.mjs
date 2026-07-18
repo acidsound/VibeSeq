@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdtemp } from 'node:fs/promises'
 import net from 'node:net'
 import os from 'node:os'
@@ -8,6 +8,17 @@ const host = '127.0.0.1'
 const executableName = process.platform === 'win32' ? 'vibeseq-inference.exe' : 'vibeseq-inference'
 const executable = path.resolve('desktop-out', 'sidecar', 'vibeseq-inference', executableName)
 const dataDir = await mkdtemp(path.join(os.tmpdir(), 'vibeseq-desktop-smoke-'))
+
+const runtimeCheck = spawnSync(executable, ['--vibeseq-check-runtime'], {
+  encoding: 'utf8',
+  windowsHide: true,
+})
+if (runtimeCheck.status !== 0) {
+  throw new Error(
+    `Bundled model runtime check failed.\n${runtimeCheck.stdout ?? ''}${runtimeCheck.stderr ?? ''}`,
+  )
+}
+process.stdout.write(`Bundled model runtime ready: ${runtimeCheck.stdout.trim()}\n`)
 
 const port = await new Promise((resolve, reject) => {
   const server = net.createServer()

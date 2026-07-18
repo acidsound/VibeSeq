@@ -55,7 +55,10 @@ def cached_files(
 
 def _route_status(route: RuntimeRoute) -> dict[str, Any]:
     artifact = MODEL_MANIFEST[route.artifact_key]
-    package_installed = all(module_installed(name) for name in route.required_modules)
+    missing_packages = tuple(
+        name for name in route.required_modules if not module_installed(name)
+    )
+    package_installed = not missing_packages
     weights_cached, missing_files = cached_files(artifact, route.required_files)
     access_granted: bool | None
     access_evidence: str | None
@@ -95,9 +98,7 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
     elif not route.execution_enabled:
         reason = route.reason or "The selected runtime route is disabled."
     elif not package_installed:
-        reason = "Missing runtime package(s): " + ", ".join(
-            name for name in route.required_modules if not module_installed(name)
-        )
+        reason = "Missing runtime package(s): " + ", ".join(missing_packages)
     elif not weights_cached:
         reason = "Exact pinned weights are not fully cached: " + ", ".join(
             missing_files
@@ -127,6 +128,7 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
         "provisional": route.provisional,
         "ready": ready,
         "missingFiles": list(missing_files),
+        "missingPackages": list(missing_packages),
         "requiredPackages": list(route.required_modules),
         "bootstrap": {
             "kind": "huggingface-files",
