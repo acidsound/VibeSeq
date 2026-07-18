@@ -13,6 +13,10 @@ files:
   - desktop/muscriptor-model-bundle.json
   - desktop/port-selection.cjs
   - desktop/preload.cjs
+  - desktop/startup-flow.cjs
+  - desktop/startup-renderer.js
+  - desktop/startup.css
+  - desktop/startup.html
   - desktop/stable-audio-model-bundle.json
   - desktop/stable-audio-NOTICE.txt
   - desktop/storage-root.cjs
@@ -40,10 +44,19 @@ mac:
 win:
   icon: build/icon.ico
   target:
-    - target: portable
+    - target: nsis
       arch:
         - x64
-  artifactName: "${productName}-${version}-Windows-${arch}.${ext}"
+  artifactName: "${productName}-${version}-Windows-${arch}-Setup.${ext}"
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
 linux:
   icon: build/icon.png
   category: AudioVideo

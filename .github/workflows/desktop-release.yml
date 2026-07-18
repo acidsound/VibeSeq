@@ -19,14 +19,17 @@ jobs:
             os: windows-latest
             artifact: vibeseq-windows-x64
             package_script: desktop:package
+            smoke_executable: release/win-unpacked/VibeSeq.exe
           - label: macOS arm64
             os: macos-15
             artifact: vibeseq-macos-arm64
             package_script: desktop:package
+            smoke_executable: release/mac-arm64/VibeSeq.app/Contents/MacOS/VibeSeq
           - label: Linux x64
             os: ubuntu-22.04
             artifact: vibeseq-linux-x64
             package_script: desktop:package:linux
+            smoke_executable: release/linux-unpacked/vibeseq
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +52,10 @@ jobs:
       - run: npm run ${{ matrix.package_script }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - if: runner.os != 'Linux'
+        run: npm run desktop:smoke-app -- "${{ matrix.smoke_executable }}"
+      - if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm run desktop:smoke-app -- "${{ matrix.smoke_executable }}"
       - run: npm run desktop:assert-model-free
       - uses: actions/upload-artifact@v4
         with:
@@ -124,13 +131,13 @@ jobs:
           - Linux x64 TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-linux-x64
           - MuScriptor Medium: https://huggingface.co/MuScriptor/muscriptor-medium
 
-          Only the Stable Audio model format for the running OS is downloaded. macOS and Linux store it below `~/VibeSeq Data/models`; the Windows portable build stores it below `VibeSeq Data/models` beside `VibeSeq.exe`.
+          Only the Stable Audio model format for the running OS is downloaded. macOS and Linux store it below `~/VibeSeq Data/models`; Windows stores it below `VibeSeq Data/models` beside the installed `VibeSeq.exe`.
 
           MuScriptor remains gated and is not redistributed. Each user accepts its Hugging Face conditions, downloads the pinned `config.json` and `model.safetensors` in their browser, and places them directly under **SAVE CACHE UNDER**. That exact revision folder opens in Finder, File Explorer, or the Linux file manager. VibeSeq does not download, select, or move these files or request or store a Hugging Face token; **Verify files in cache** only validates the files already in that folder.
 
           Powered by Stability AI.
 
-          Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. On Linux, run `chmod +x VibeSeq-*.AppImage` before launching. Verify the downloaded asset with `SHA256SUMS.txt` before running it.
+          Windows is distributed as a current-user assisted NSIS installer so extraction progress is visible and `VibeSeq Data` remains beside the installed executable. The installed app then shows Local data, Audio engine, Health check, and Studio startup stages while its local service starts. Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. On Linux, run `chmod +x VibeSeq-*.AppImage` before launching. Verify the downloaded asset with `SHA256SUMS.txt` before running it.
           EOF
       - name: Create GitHub prerelease
         env:

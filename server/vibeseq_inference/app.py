@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import mimetypes
 from pathlib import Path
 from typing import Annotated
 
@@ -28,7 +29,27 @@ from .storage import Storage
 from .storage_paths import model_cache_dir, vibeseq_home
 
 
+STUDIO_MEDIA_TYPES = {
+    ".css": "text/css",
+    ".js": "text/javascript",
+    ".json": "application/json",
+    ".mp3": "audio/mpeg",
+    ".wasm": "application/wasm",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+}
+
+
+def configure_studio_media_types() -> None:
+    # Python loads MIME overrides from the Windows registry. A machine-level
+    # .js association must never turn a successful static response into a
+    # module that Chromium refuses to execute.
+    for extension, media_type in STUDIO_MEDIA_TYPES.items():
+        mimetypes.add_type(media_type, extension, strict=True)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
+    configure_studio_media_types()
     config = (settings or Settings.from_env()).validate()
     storage = Storage(config.data_dir)
     jobs = JobManager(storage, workers=config.job_workers)

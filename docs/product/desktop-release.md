@@ -8,7 +8,7 @@ validation.
 A tag matching `v*` runs `.github/workflows/desktop-release.yml` and publishes a
 GitHub prerelease containing:
 
-- `VibeSeq-<version>-Windows-x64.exe`: portable Windows executable.
+- `VibeSeq-<version>-Windows-x64-Setup.exe`: assisted Windows installer.
 - `VibeSeq-<version>-macOS-arm64.dmg`: Apple Silicon disk image.
 - `VibeSeq-<version>-macOS-arm64.zip`: Apple Silicon application archive.
 - `SHA256SUMS.txt`: release-asset checksums.
@@ -22,9 +22,10 @@ allocated loopback origin.
 ## Storage root
 
 VibeSeq keeps large and durable data out of opaque operating-system caches.
-The Windows portable executable creates `VibeSeq Data` beside the distributed
-`.exe`. The macOS application uses `~/VibeSeq Data`. `VIBESEQ_HOME` overrides
-either default for an external drive or another user-selected location.
+Windows creates `VibeSeq Data` beside the installed `VibeSeq.exe`; the assisted
+installer defaults to a current-user, writable installation. The macOS
+application uses `~/VibeSeq Data`. `VIBESEQ_HOME` overrides either default for
+an external drive or another user-selected location.
 
 The root contains `models`, `runtimes`, `projects`, `library`, `inference`,
 `cache`, `logs`, and `profile`. The Electron profile (including IndexedDB),
@@ -68,7 +69,7 @@ the path shown by the application, so the inference process can run offline
 after installation. The default cache roots are:
 
 - macOS: `~/VibeSeq Data/models/huggingface/hub`
-- Windows portable: `VibeSeq Data/models/huggingface/hub` beside
+- Windows: `VibeSeq Data/models/huggingface/hub` beside the installed
   `VibeSeq.exe`
 
 MuScriptor remains gated. Each user must sign in on its official model page,
@@ -103,24 +104,36 @@ npm run desktop:package
 checks both `/api/health` and the served Studio entrypoint, and then invokes
 Electron Builder. Outputs are written to `release/`.
 
+Windows uses an assisted NSIS installer rather than a portable self-extracting
+executable. The installer owns extraction progress for the large bundled local
+runtime and defaults to a writable current-user installation; elevation from
+the installer is disabled so `VibeSeq Data` can remain beside `VibeSeq.exe`.
+After installation, the application opens its startup window before preparing
+durable folders or launching the inference sidecar. That window shows the active
+startup stage and elapsed engine-wait time until Studio is ready.
+
 ## Windows acceptance pass
 
 On a clean Windows 11 x64 machine:
 
-1. Verify the downloaded `.exe` against `SHA256SUMS.txt`.
-2. Launch it and record any SmartScreen warning separately from application
-   failures.
-3. Create a project, add independent Audio and MIDI tracks, edit and play both,
+1. Verify the downloaded `*-Setup.exe` against `SHA256SUMS.txt`.
+2. Run the assisted installer and record any SmartScreen warning separately
+   from installation or application failures.
+3. Confirm `VibeSeq Data` is created beside the installed `VibeSeq.exe`, not in
+   the user home or an opaque operating-system data directory.
+4. Confirm the startup window appears before the local engine is ready and
+   advances through Local data, Audio engine, Health check, and Studio.
+5. Create a project, add independent Audio and MIDI tracks, edit and play both,
    save, close, and reopen the app.
-4. Start with an absent or empty `VibeSeq Data`, accept the displayed model
+6. Start with an absent or empty `VibeSeq Data`, accept the displayed model
    terms, let the built-in installer download only the Windows TFLite Release,
    then generate with Stable Audio 3 Medium and extract
    with MuScriptor Medium, and confirm both provenance records and runtime
    routes match the health response.
-5. Export a `.vibeseq` project, full mix, MIDI, one track, and the all-track ZIP;
+7. Export a `.vibeseq` project, full mix, MIDI, one track, and the all-track ZIP;
    reopen the project and validate the exported files.
-6. Switch away from and back to VibeSeq during playback, then repeat mute, solo,
+8. Switch away from and back to VibeSeq during playback, then repeat mute, solo,
    gain, piano-key audition, and note-selection edits.
-7. Retain the exact release asset name, checksum, Windows version, hardware,
+9. Retain the exact release asset name, checksum, Windows version, hardware,
    screen recording, exported fixtures, and the desktop log from the Electron
    logs directory.

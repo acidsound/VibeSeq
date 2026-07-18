@@ -1,6 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('vibeseqDesktop', {
+  startup: {
+    status: () => ipcRenderer.invoke('desktop:startup-state'),
+    onProgress: (listener) => {
+      const handler = (_event, progress) => listener(progress)
+      ipcRenderer.on('desktop:startup-progress', handler)
+      return () => ipcRenderer.removeListener('desktop:startup-progress', handler)
+    },
+  },
+  studio: {
+    ready: () => ipcRenderer.send('desktop:studio-ready'),
+  },
   stableAudio: {
     status: () => ipcRenderer.invoke('stable-audio:status'),
     install: (accepted) => ipcRenderer.invoke('stable-audio:install', { accepted: accepted === true }),

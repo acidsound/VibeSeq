@@ -36,6 +36,25 @@ type MuscriptorVerifyResult = {
 
 interface Window {
   vibeseqDesktop?: {
+    startup?: {
+      status: () => Promise<{
+        phase: string
+        step: number
+        title: string
+        detail: string
+        elapsedSeconds?: number
+      }>
+      onProgress: (listener: (progress: {
+        phase: string
+        step: number
+        title: string
+        detail: string
+        elapsedSeconds?: number
+      }) => void) => () => void
+    }
+    studio?: {
+      ready: () => void
+    }
     stableAudio: {
       status: () => Promise<StableAudioInstallStatus>
       install: (accepted: boolean) => Promise<StableAudioInstallStatus>

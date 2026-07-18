@@ -5,8 +5,16 @@ import '@fontsource/ibm-plex-mono/400.css'
 import './styles.css'
 import App from './App'
 
+function StudioReadySignal() {
+  React.useEffect(() => {
+    window.vibeseqDesktop?.studio?.ready()
+  }, [])
+  return null
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
+    <StudioReadySignal />
   </React.StrictMode>,
 )

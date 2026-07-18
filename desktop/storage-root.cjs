@@ -49,11 +49,24 @@ const prepareStorageRoot = (root) => {
   return root
 }
 
+const prepareStorageRootAsync = async (root) => {
+  await fs.promises.mkdir(root, { recursive: true })
+  await Promise.all(STORAGE_DIRECTORIES.map((directory) => (
+    fs.promises.mkdir(path.join(root, directory), { recursive: true })
+  )))
+  return root
+}
+
 const configureElectronStorage = (electronApp, root) => {
-  prepareStorageRoot(root)
-  electronApp.setPath('userData', path.join(root, 'profile'))
-  electronApp.setPath('cache', path.join(root, 'cache', 'chromium'))
-  electronApp.setPath('logs', path.join(root, 'logs'))
+  const profile = path.join(root, 'profile')
+  const chromiumCache = path.join(root, 'cache', 'chromium')
+  const logs = path.join(root, 'logs')
+  for (const requiredPath of [profile, chromiumCache, logs]) {
+    fs.mkdirSync(requiredPath, { recursive: true })
+  }
+  electronApp.setPath('userData', profile)
+  electronApp.setPath('cache', chromiumCache)
+  electronApp.setPath('logs', logs)
 }
 
 const sidecarStorageEnvironment = (root) => {
@@ -73,6 +86,7 @@ module.exports = {
   STORAGE_DIRECTORIES,
   configureElectronStorage,
   prepareStorageRoot,
+  prepareStorageRootAsync,
   resolveStorageRoot,
   sidecarStorageEnvironment,
 }

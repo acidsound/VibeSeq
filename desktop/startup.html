@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Starting VibeSeq</title>
+    <link rel="stylesheet" href="./startup.css" />
+  </head>
+  <body>
+    <main class="startup-shell">
+      <section class="startup-card" aria-labelledby="startup-title">
+        <div class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p class="eyebrow">VIBESEQ · LOCAL STUDIO</p>
+        <h1 id="startup-title">Starting VibeSeq</h1>
+        <p id="startup-detail" class="detail">Opening the startup window.</p>
+
+        <div
+          id="startup-progress"
+          class="progress-track"
+          role="progressbar"
+          aria-label="VibeSeq startup progress"
+          aria-valuemin="0"
+          aria-valuemax="4"
+          aria-valuenow="0"
+        >
+          <div id="startup-progress-fill" class="progress-fill"></div>
+        </div>
+
+        <ol class="steps" aria-label="Startup stages">
+          <li data-step="1"><span>1</span><strong>Local data</strong></li>
+          <li data-step="2"><span>2</span><strong>Audio engine</strong></li>
+          <li data-step="3"><span>3</span><strong>Health check</strong></li>
+          <li data-step="4"><span>4</span><strong>Studio</strong></li>
+        </ol>
+
+        <div class="status-line" aria-live="polite">
+          <span class="pulse" aria-hidden="true"></span>
+          <span id="startup-status">Opening VibeSeq…</span>
+          <span id="startup-elapsed" class="elapsed"></span>
+        </div>
+
+        <p class="first-run-note">
+          The first launch can take longer while the operating system checks the bundled local audio engine.
+          VibeSeq does not download model weights during this startup step.
+        </p>
+      </section>
+    </main>
+    <script src="./startup-renderer.js"></script>
+  </body>
+</html>

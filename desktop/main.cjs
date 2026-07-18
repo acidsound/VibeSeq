@@ -2,29 +2,42 @@ const { app, BrowserWindow, dialog, ipcMain, session, shell } = require('electro
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 const {
   LOOPBACK_HOST,
   findAvailablePort,
 } = require('./port-selection.cjs')
 const {
   configureElectronStorage,
+  prepareStorageRootAsync,
   resolveStorageRoot,
   sidecarStorageEnvironment,
 } = require('./storage-root.cjs')
+const { runDesktopStartup } = require('./startup-flow.cjs')
 const { StableAudioModelInstaller } = require('./model-installer.cjs')
 const stableAudioManifest = require('./stable-audio-model-bundle.json')
 const { MuscriptorCacheVerifier } = require('./muscriptor-importer.cjs')
 const muscriptorManifest = require('./muscriptor-model-bundle.json')
 
 const ELECTRON_SERVER_START_PORT = 10_000
-const STARTUP_TIMEOUT_MS = 30_000
+const STARTUP_TIMEOUT_MS = process.platform === 'win32' ? 120_000 : 60_000
+const RENDERER_READY_TIMEOUT_MS = process.platform === 'win32' ? 60_000 : 30_000
 
 let mainWindow = null
+let startupWindow = null
 let sidecar = null
 let sidecarLog = null
 let quitting = false
 let modelInstallController = null
 let modelInstallPromise = null
+let studioOrigin = null
+let startupState = {
+  phase: 'window',
+  step: 0,
+  title: 'Opening VibeSeq',
+  detail: 'Preparing the startup window.',
+  elapsedSeconds: 0,
+}
 
 const storageRoot = resolveStorageRoot({ isPackaged: app.isPackaged })
 configureElectronStorage(app, storageRoot)
@@ -38,6 +51,14 @@ const muscriptorCacheVerifier = new MuscriptorCacheVerifier({
   manifest: muscriptorManifest,
 })
 
+const updateStartup = (update) => {
+  startupState = { ...startupState, ...update }
+  if (startupWindow && !startupWindow.isDestroyed()) {
+    startupWindow.webContents.send('desktop:startup-progress', startupState)
+  }
+}
+
+ipcMain.handle('desktop:startup-state', () => startupState)
 ipcMain.handle('stable-audio:status', () => stableAudioInstaller.status())
 ipcMain.handle('stable-audio:install', async (_event, request) => {
   if (request?.accepted !== true) {
@@ -100,8 +121,17 @@ const studioDirectory = () => (
   app.isPackaged ? packagedResource('studio') : path.join(__dirname, '..', 'dist')
 )
 
+const startupPageUrl = pathToFileURL(path.join(__dirname, 'startup.html')).toString()
+
 const appendDesktopLog = (message) => {
   if (sidecarLog) sidecarLog.write(`[desktop] ${message}\n`)
+}
+
+const activeWindow = () => {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) return mainWindow
+  if (startupWindow && !startupWindow.isDestroyed()) return startupWindow
+  if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
+  return null
 }
 
 const stopSidecar = () => {
@@ -110,26 +140,57 @@ const stopSidecar = () => {
   sidecar = null
 }
 
-const waitForStudio = async (origin, processHandle) => {
+const waitForStudio = async (origin, processHandle, onProgress) => {
+  const startedAt = Date.now()
   const deadline = Date.now() + STARTUP_TIMEOUT_MS
   let lastError = null
-  while (Date.now() < deadline) {
-    if (processHandle.exitCode !== null) {
-      throw new Error(`The local inference service exited with code ${processHandle.exitCode}.`)
+  let processError = null
+  let lastReportedSecond = -1
+  const recordProcessError = (error) => { processError = error }
+  processHandle.once('error', recordProcessError)
+
+  try {
+    while (Date.now() < deadline) {
+      if (processError) throw processError
+      if (processHandle.exitCode !== null) {
+        throw new Error(`The local inference service exited with code ${processHandle.exitCode}.`)
+      }
+
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000)
+      if (elapsedSeconds !== lastReportedSecond) {
+        lastReportedSecond = elapsedSeconds
+        onProgress({
+          phase: 'health',
+          step: 3,
+          title: 'Waiting for the local engine',
+          detail: 'Loading audio and MIDI runtimes, then checking the local API.',
+          elapsedSeconds,
+        })
+      }
+
+      try {
+        const health = await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(1_500) })
+        if (health.ok) return
+        lastError = new Error(`Health check returned ${health.status}.`)
+      } catch (error) {
+        lastError = error
+      }
+      await delay(250)
     }
-    try {
-      const health = await fetch(`${origin}/api/health`)
-      if (health.ok) return
-      lastError = new Error(`Health check returned ${health.status}.`)
-    } catch (error) {
-      lastError = error
-    }
-    await delay(200)
+  } finally {
+    processHandle.removeListener('error', recordProcessError)
   }
   throw new Error(`Timed out starting the local service: ${lastError?.message ?? 'unknown error'}`)
 }
 
-const launchSidecar = async () => {
+const launchSidecar = async (onProgress) => {
+  onProgress({
+    phase: 'engine',
+    step: 2,
+    title: 'Starting the local engine',
+    detail: 'Selecting a private local port and checking the bundled engine files.',
+    elapsedSeconds: 0,
+  })
   const port = await findAvailablePort(ELECTRON_SERVER_START_PORT)
   const origin = `http://${LOOPBACK_HOST}:${port}`
   const executable = sidecarExecutable()
@@ -163,8 +224,9 @@ const launchSidecar = async () => {
   sidecar.once('error', (error) => appendDesktopLog(`sidecar error: ${error.message}`))
   sidecar.once('exit', (code, signal) => {
     appendDesktopLog(`sidecar exit code=${code} signal=${signal}`)
-    if (!quitting && mainWindow && !mainWindow.isDestroyed()) {
-      void dialog.showMessageBox(mainWindow, {
+    const owner = activeWindow()
+    if (!quitting && owner) {
+      void dialog.showMessageBox(owner, {
         type: 'error',
         title: 'VibeSeq engine stopped',
         message: 'The local VibeSeq engine stopped unexpectedly.',
@@ -173,14 +235,24 @@ const launchSidecar = async () => {
     }
   })
 
-  await waitForStudio(origin, sidecar)
+  await waitForStudio(origin, sidecar, onProgress)
   return origin
 }
 
-const createWindow = async (origin) => {
+const isAllowedNavigation = (url) => {
+  if (url === startupPageUrl) return true
+  if (!studioOrigin) return false
+  try {
+    return new URL(url).origin === studioOrigin
+  } catch {
+    return false
+  }
+}
+
+const createWindow = async () => {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
 
-  mainWindow = new BrowserWindow({
+  startupWindow = new BrowserWindow({
     width: 1600,
     height: 1000,
     minWidth: 960,
@@ -197,36 +269,187 @@ const createWindow = async (origin) => {
     },
   })
 
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (new URL(url).origin !== origin) event.preventDefault()
+  startupWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  startupWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedNavigation(url)) event.preventDefault()
   })
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
-  mainWindow.on('closed', () => { mainWindow = null })
-  await mainWindow.loadURL(origin)
+  startupWindow.on('closed', () => {
+    startupWindow = null
+    if (!quitting && (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible())) app.quit()
+  })
+  await startupWindow.loadFile(path.join(__dirname, 'startup.html'))
+  startupWindow.show()
 }
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock()
+const logRendererEvents = (window) => {
+  const { webContents } = window
+  webContents.on('console-message', (details) => {
+    appendDesktopLog(
+      `renderer console ${details.level}: ${details.message} (${details.sourceId || 'unknown'}:${details.lineNumber || 0})`,
+    )
+  })
+  webContents.on('dom-ready', () => appendDesktopLog('renderer DOM ready'))
+  webContents.on('did-finish-load', () => appendDesktopLog(`renderer finished loading ${webContents.getURL()}`))
+  webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    appendDesktopLog(
+      `renderer load failed code=${errorCode} main-frame=${isMainFrame} url=${validatedURL} error=${errorDescription}`,
+    )
+  })
+  webContents.on('preload-error', (_event, preloadPath, error) => {
+    appendDesktopLog(`renderer preload failed path=${preloadPath} error=${error.stack ?? error.message}`)
+  })
+  webContents.on('render-process-gone', (_event, details) => {
+    appendDesktopLog(`renderer process gone reason=${details.reason} exit-code=${details.exitCode}`)
+  })
+  window.on('unresponsive', () => appendDesktopLog('renderer became unresponsive'))
+  window.on('responsive', () => appendDesktopLog('renderer became responsive'))
+}
+
+const waitForStudioRenderer = (window, origin, onProgress) => new Promise((resolve, reject) => {
+  const startedAt = Date.now()
+  let settled = false
+  let lastReportedSecond = -1
+
+  const cleanup = () => {
+    clearTimeout(timeout)
+    clearInterval(progressTimer)
+    ipcMain.removeListener('desktop:studio-ready', handleReady)
+    window.webContents.removeListener('did-fail-load', handleLoadFailure)
+    window.webContents.removeListener('preload-error', handlePreloadFailure)
+    window.webContents.removeListener('render-process-gone', handleRendererGone)
+    window.removeListener('unresponsive', handleUnresponsive)
+  }
+  const finish = (error) => {
+    if (settled) return
+    settled = true
+    cleanup()
+    if (error) reject(error)
+    else resolve()
+  }
+  const handleReady = (event) => {
+    if (event.sender !== window.webContents) return
+    appendDesktopLog(`renderer reported Studio ready after ${Date.now() - startedAt}ms`)
+    finish()
+  }
+  const handleLoadFailure = (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return
+    finish(new Error(`Studio failed to load (${errorCode}): ${errorDescription} · ${validatedURL}`))
+  }
+  const handlePreloadFailure = (_event, preloadPath, error) => {
+    finish(new Error(`Studio preload failed at ${preloadPath}: ${error.message}`))
+  }
+  const handleRendererGone = (_event, details) => {
+    finish(new Error(`Studio renderer stopped (${details.reason}, exit ${details.exitCode}).`))
+  }
+  const handleUnresponsive = () => {
+    finish(new Error('Studio renderer became unresponsive before the interface was ready.'))
+  }
+  const reportProgress = () => {
+    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000)
+    if (elapsedSeconds === lastReportedSecond) return
+    lastReportedSecond = elapsedSeconds
+    onProgress({
+      phase: 'studio',
+      step: 4,
+      title: 'Opening Studio',
+      detail: 'The local engine is ready. Waiting for the interface to render.',
+      elapsedSeconds,
+    })
+  }
+
+  ipcMain.on('desktop:studio-ready', handleReady)
+  window.webContents.on('did-fail-load', handleLoadFailure)
+  window.webContents.once('preload-error', handlePreloadFailure)
+  window.webContents.once('render-process-gone', handleRendererGone)
+  window.once('unresponsive', handleUnresponsive)
+  const timeout = setTimeout(() => {
+    finish(new Error(`Studio did not render within ${Math.round(RENDERER_READY_TIMEOUT_MS / 1000)} seconds.`))
+  }, RENDERER_READY_TIMEOUT_MS)
+  const progressTimer = setInterval(reportProgress, 500)
+  reportProgress()
+
+  void window.loadURL(origin).catch((error) => finish(error))
+})
+
+const loadStudio = async (origin, onProgress) => {
+  studioOrigin = origin
+  const window = new BrowserWindow({
+    width: 1600,
+    height: 1000,
+    minWidth: 960,
+    minHeight: 640,
+    backgroundColor: '#111315',
+    show: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.cjs'),
+      sandbox: true,
+      webSecurity: true,
+    },
+  })
+  mainWindow = window
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedNavigation(url)) event.preventDefault()
+  })
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = null
+  })
+  logRendererEvents(window)
+
+  try {
+    await waitForStudioRenderer(window, origin, onProgress)
+    if (window.isDestroyed()) throw new Error('Studio window closed before the interface was ready.')
+    window.show()
+    startupWindow?.destroy()
+    startupWindow = null
+  } catch (error) {
+    if (!window.isDestroyed()) window.destroy()
+    if (mainWindow === window) mainWindow = null
+    throw error
+  }
+}
+
+const hasSingleInstanceLock = !app.isPackaged || app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
 app.on('second-instance', () => {
-  if (!mainWindow) return
-  if (mainWindow.isMinimized()) mainWindow.restore()
-  mainWindow.focus()
+  const window = activeWindow()
+  if (!window) return
+  if (window.isMinimized()) window.restore()
+  window.focus()
 })
 
 app.whenReady().then(async () => {
   try {
-    const origin = await launchSidecar()
-    await createWindow(origin)
+    await runDesktopStartup({
+      createWindow,
+      prepareStorage: () => prepareStorageRootAsync(storageRoot),
+      launchSidecar,
+      loadStudio,
+      updateStartup,
+    })
   } catch (error) {
+    updateStartup({
+      phase: 'error',
+      title: 'VibeSeq could not start',
+      detail: error.message,
+    })
     appendDesktopLog(`startup failure: ${error.stack ?? error.message}`)
-    await dialog.showMessageBox({
+    const options = {
       type: 'error',
       title: 'VibeSeq could not start',
       message: 'VibeSeq could not start its local engine.',
       detail: `${error.message}\n\nLog: ${path.join(app.getPath('logs'), 'vibeseq-desktop.log')}`,
-    })
+    }
+    const owner = activeWindow()
+    if (owner) {
+      await dialog.showMessageBox(owner, options)
+    } else {
+      await dialog.showMessageBox(options)
+    }
     app.quit()
   }
 })

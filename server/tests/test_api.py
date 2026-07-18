@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import mimetypes
 import sys
 import time
 import wave
@@ -278,16 +279,32 @@ def test_validation_and_missing_resources(tmp_path: Path) -> None:
         assert client.get("/api/assets/not-an-asset").status_code == 404
 
 
-def test_static_studio_and_api_share_one_origin(tmp_path: Path) -> None:
+def test_static_studio_and_api_share_one_origin(
+    tmp_path: Path, monkeypatch
+) -> None:
     studio_dist = tmp_path / "dist"
     studio_dist.mkdir()
     (studio_dist / "index.html").write_text(
-        "<!doctype html><title>VibeSeq fixture</title>", encoding="utf-8"
+        '<!doctype html><title>VibeSeq fixture</title>'
+        '<script type="module" src="/assets/index.js"></script>'
+        '<link rel="stylesheet" href="/assets/index.css">',
+        encoding="utf-8",
     )
+    assets = studio_dist / "assets"
+    assets.mkdir()
+    (assets / "index.js").write_text("document.body.dataset.ready = 'true'", encoding="utf-8")
+    (assets / "index.css").write_text("body { color: white; }", encoding="utf-8")
+    monkeypatch.setitem(mimetypes.types_map, ".js", "text/plain")
+    monkeypatch.setitem(mimetypes.types_map, ".css", "text/plain")
     config = settings(tmp_path / "data", studio_dist=studio_dist)
     with TestClient(create_app(config)) as client:
         studio = client.get("/")
+        script = client.get("/assets/index.js")
+        stylesheet = client.get("/assets/index.css")
         health = client.get("/api/health")
         assert studio.status_code == health.status_code == 200
         assert "VibeSeq fixture" in studio.text
+        assert script.status_code == stylesheet.status_code == 200
+        assert script.headers["content-type"].startswith("text/javascript")
+        assert stylesheet.headers["content-type"].startswith("text/css")
         assert health.json()["service"] == "vibeseq-inference"

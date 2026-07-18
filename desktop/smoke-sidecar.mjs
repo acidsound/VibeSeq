@@ -47,7 +47,24 @@ try {
         fetch(`http://${host}:${port}/`),
       ])
       const studioHtml = await studio.text()
-      if (health.ok && studio.ok && studioHtml.includes('<title>VibeSeq</title>')) {
+      const scriptPath = studioHtml.match(/<script[^>]+src="([^"]+\.js)"/)?.[1]
+      const stylesheetPath = studioHtml.match(/<link[^>]+href="([^"]+\.css)"/)?.[1]
+      if (!scriptPath || !stylesheetPath) throw new Error('Studio entrypoint does not reference built JS and CSS assets.')
+      const [script, stylesheet] = await Promise.all([
+        fetch(`http://${host}:${port}${scriptPath}`),
+        fetch(`http://${host}:${port}${stylesheetPath}`),
+      ])
+      const scriptType = script.headers.get('content-type') ?? ''
+      const stylesheetType = stylesheet.headers.get('content-type') ?? ''
+      if (
+        health.ok
+        && studio.ok
+        && script.ok
+        && stylesheet.ok
+        && studioHtml.includes('<title>VibeSeq</title>')
+        && scriptType.startsWith('text/javascript')
+        && stylesheetType.startsWith('text/css')
+      ) {
         ready = true
         break
       }

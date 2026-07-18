@@ -1,6 +1,6 @@
 {
   "name": "vibeseq",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "description": "Local-first AI-assisted WebDAW for audio generation, transcription, editing, and arrangement",
   "author": "VibeSeq contributors",
   "private": true,
@@ -26,6 +26,7 @@
     "desktop:prepare": "npm run build && npm run desktop:sidecar",
     "desktop:prepare:linux": "npm run build && npm run desktop:sidecar:linux",
     "desktop:smoke": "node desktop/smoke-sidecar.mjs",
+    "desktop:smoke-app": "node desktop/smoke-app.mjs",
     "desktop:test": "node --test desktop/*.test.cjs",
     "desktop:assert-model-free": "node scripts/assert-desktop-package-model-free.mjs release",
     "desktop:pack": "npm run desktop:prepare && npm run desktop:smoke && electron-builder --dir --publish never",

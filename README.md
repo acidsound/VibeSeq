@@ -177,8 +177,8 @@ Review the upstream licenses before production or commercial use:
 
 ## Desktop prerelease packages
 
-Release tags matching `v*` build an unsigned Windows x64 portable executable
-and unsigned Apple Silicon macOS packages through GitHub Actions. These packages
+Release tags matching `v*` build an unsigned Windows x64 assisted installer and
+unsigned Apple Silicon macOS packages through GitHub Actions. These packages
 embed the Studio and lightweight local inference sidecar, so the target machine
 does not need Node.js, Python, `uv`, or a separate web server.
 
@@ -196,11 +196,10 @@ See `docs/product/desktop-release.md` for artifact names, model paths,
 security boundaries, unsigned-build warnings, and the clean-Windows acceptance
 checklist.
 
-Windows portable builds store their durable `VibeSeq Data` directory beside
-the distributed executable. macOS builds default to `~/VibeSeq Data` because a
-signed `.app` bundle must remain immutable. Set `VIBESEQ_HOME` before launch to
-place the complete profile, model, runtime, project, Library, and inference
-tree on another volume.
+Windows builds keep `VibeSeq Data` beside the installed `VibeSeq.exe`; macOS
+builds default to `~/VibeSeq Data`. Set `VIBESEQ_HOME` before launch to place the
+complete profile, model, runtime, project, Library, and inference tree on
+another volume.
 
 ## Colab T4 target
 
