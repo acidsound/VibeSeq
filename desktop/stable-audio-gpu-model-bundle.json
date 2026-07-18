@@ -7,7 +7,7 @@
     "repository": "acidsound/VibeSeq"
   },
   "terms": {
-    "stability": "https://huggingface.co/stabilityai/stable-audio-3-medium/blob/27b5a21b791b1b033d193a9e1e3ce78493f102f9/LICENSE.md",
+    "stability": "https://github.com/acidsound/VibeSeq/releases/download/stable-audio-3-27b5a21-windows-x64-fa2/LICENSE.md",
     "gemma": "https://ai.google.dev/gemma/terms",
     "source": "https://huggingface.co/stabilityai/stable-audio-3-medium/tree/27b5a21b791b1b033d193a9e1e3ce78493f102f9"
   },
@@ -40,11 +40,9 @@
   "variants": {
     "win32-x64": {
       "label": "Windows x64 · NVIDIA CUDA · FlashAttention 2",
-      "source": {
-        "kind": "huggingface",
-        "baseUrl": "https://huggingface.co/stabilityai/stable-audio-3-medium/resolve/27b5a21b791b1b033d193a9e1e3ce78493f102f9",
-        "accessUrl": "https://huggingface.co/stabilityai/stable-audio-3-medium",
-        "requiresToken": true
+      "release": {
+        "tag": "stable-audio-3-27b5a21-windows-x64-fa2",
+        "baseUrl": "https://github.com/acidsound/VibeSeq/releases/download/stable-audio-3-27b5a21-windows-x64-fa2"
       },
       "downloadBytes": 10443825499,
       "minimumFreeBytes": 14000000000,
@@ -54,7 +52,7 @@
           "size": 10360,
           "gitSha1": "331bfb7e610b15000c930a38f0543f75f3b132be",
           "parts": [
-            { "asset": "model_config.json", "size": 10360, "gitSha1": "331bfb7e610b15000c930a38f0543f75f3b132be" }
+            { "asset": "sa3-27b5a21-model-config.json", "size": 10360, "gitSha1": "331bfb7e610b15000c930a38f0543f75f3b132be" }
           ]
         },
         {
@@ -62,7 +60,11 @@
           "size": 9222116660,
           "sha256": "48d9c65e290e7bcd5194e0633bfc2424a59ee9683f5c2d58762d997b7d8ce0b5",
           "parts": [
-            { "asset": "model.safetensors", "size": 9222116660, "sha256": "48d9c65e290e7bcd5194e0633bfc2424a59ee9683f5c2d58762d997b7d8ce0b5" }
+            { "asset": "sa3-27b5a21-model-safetensors.part-000", "size": 1900000000 },
+            { "asset": "sa3-27b5a21-model-safetensors.part-001", "size": 1900000000 },
+            { "asset": "sa3-27b5a21-model-safetensors.part-002", "size": 1900000000 },
+            { "asset": "sa3-27b5a21-model-safetensors.part-003", "size": 1900000000 },
+            { "asset": "sa3-27b5a21-model-safetensors.part-004", "size": 1622116660 }
           ]
         },
         {
@@ -70,7 +72,7 @@
           "size": 2540,
           "gitSha1": "f5282e2a2964d231e0f19cb2a23f39e08de83128",
           "parts": [
-            { "asset": "t5gemma-b-b-ul2/config.json", "size": 2540, "gitSha1": "f5282e2a2964d231e0f19cb2a23f39e08de83128" }
+            { "asset": "sa3-27b5a21-t5gemma-config.json", "size": 2540, "gitSha1": "f5282e2a2964d231e0f19cb2a23f39e08de83128" }
           ]
         },
         {
@@ -78,7 +80,7 @@
           "size": 1183022944,
           "sha256": "9b05ea5a4f211d023832f706fb2c0e83e4fc721b6da35ab69ceb0b55eb7800d3",
           "parts": [
-            { "asset": "t5gemma-b-b-ul2/model.safetensors", "size": 1183022944, "sha256": "9b05ea5a4f211d023832f706fb2c0e83e4fc721b6da35ab69ceb0b55eb7800d3" }
+            { "asset": "sa3-27b5a21-t5gemma-model.safetensors", "size": 1183022944, "sha256": "9b05ea5a4f211d023832f706fb2c0e83e4fc721b6da35ab69ceb0b55eb7800d3" }
           ]
         },
         {
@@ -86,7 +88,7 @@
           "size": 636,
           "gitSha1": "8d6368f7e735fbe4781bf6e956b7c6ad0586df80",
           "parts": [
-            { "asset": "t5gemma-b-b-ul2/special_tokens_map.json", "size": 636, "gitSha1": "8d6368f7e735fbe4781bf6e956b7c6ad0586df80" }
+            { "asset": "sa3-27b5a21-t5gemma-special-tokens-map.json", "size": 636, "gitSha1": "8d6368f7e735fbe4781bf6e956b7c6ad0586df80" }
           ]
         },
         {
@@ -94,7 +96,7 @@
           "size": 34362429,
           "sha256": "7794135caa3ea73918949c902a781cc61dab674a4b59c17d85931c77c1114cbd",
           "parts": [
-            { "asset": "t5gemma-b-b-ul2/tokenizer.json", "size": 34362429, "sha256": "7794135caa3ea73918949c902a781cc61dab674a4b59c17d85931c77c1114cbd" }
+            { "asset": "sa3-27b5a21-t5gemma-tokenizer.json", "size": 34362429, "sha256": "7794135caa3ea73918949c902a781cc61dab674a4b59c17d85931c77c1114cbd" }
           ]
         },
         {
@@ -102,7 +104,7 @@
           "size": 4241003,
           "sha256": "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2",
           "parts": [
-            { "asset": "t5gemma-b-b-ul2/tokenizer.model", "size": 4241003, "sha256": "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2" }
+            { "asset": "sa3-27b5a21-t5gemma-tokenizer.model", "size": 4241003, "sha256": "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2" }
           ]
         },
         {
@@ -110,7 +112,7 @@
           "size": 46437,
           "gitSha1": "4d625a54ce31c6629f25dadcc7d878e771b40ef7",
           "parts": [
-            { "asset": "t5gemma-b-b-ul2/tokenizer_config.json", "size": 46437, "gitSha1": "4d625a54ce31c6629f25dadcc7d878e771b40ef7" }
+            { "asset": "sa3-27b5a21-t5gemma-tokenizer-config.json", "size": 46437, "gitSha1": "4d625a54ce31c6629f25dadcc7d878e771b40ef7" }
           ]
         }
       ]

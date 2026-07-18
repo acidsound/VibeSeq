@@ -17,6 +17,7 @@ class ModelArtifact:
     code_revision: str | None
     license: str
     gated: bool
+    redistributed: bool
     files: tuple[str, ...]
 
     def provenance(self) -> dict[str, str | bool | list[str] | None]:
@@ -28,6 +29,7 @@ class ModelArtifact:
             "codeRevision": self.code_revision,
             "license": self.license,
             "gated": self.gated,
+            "redistributed": self.redistributed,
             "files": list(self.files),
         }
 
@@ -42,6 +44,7 @@ STABLE_AUDIO_3_MEDIUM = ModelArtifact(
     code_revision="b32763cf3b71c160f10a0daa4fa0e0d471b5772e",
     license="Stability AI Community License + Gemma Terms of Use",
     gated=True,
+    redistributed=True,
     files=(
         "model_config.json",
         "model.safetensors",
@@ -68,6 +71,7 @@ STABLE_AUDIO_3_MEDIUM_OPTIMIZED = ModelArtifact(
     code_revision="b32763cf3b71c160f10a0daa4fa0e0d471b5772e",
     license="Stability AI Community License + Gemma Terms of Use",
     gated=False,
+    redistributed=True,
     files=(
         "MLX/dit_medium_f16.npz",
         "MLX/same_l_decoder_f32.npz",
@@ -89,6 +93,7 @@ MUSCRIPTOR_MEDIUM = ModelArtifact(
     code_revision="6c1460cc75e5f120948de7656da05b2c489e8715",
     license="CC BY-NC 4.0",
     gated=True,
+    redistributed=False,
     files=("config.json", "model.safetensors"),
 )
 

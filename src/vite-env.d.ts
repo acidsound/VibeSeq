@@ -13,7 +13,6 @@ type StableAudioInstallStatus = {
   modelId?: string
   releaseUrl?: string
   installRoot?: string
-  requiresToken?: boolean
   runtimeInstalled?: boolean
   terms?: {
     stability: string
@@ -63,7 +62,6 @@ interface Window {
       install: (request: {
         accepted: boolean
         modelId?: string
-        token?: string
       }) => Promise<StableAudioInstallStatus>
       cancel: () => Promise<{ cancelled: boolean }>
       onProgress: (listener: (progress: StableAudioInstallProgress) => void) => () => void

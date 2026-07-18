@@ -91,7 +91,6 @@ function EngineCapabilityCard({
   const [installProgress, setInstallProgress] = useState<StableAudioInstallProgress | null>(null)
   const [installing, setInstalling] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
-  const [huggingFaceToken, setHuggingFaceToken] = useState('')
   const [installError, setInstallError] = useState<string | null>(null)
   const [verifyingMuscriptor, setVerifyingMuscriptor] = useState(false)
   const [muscriptorVerifyError, setMuscriptorVerifyError] = useState<string | null>(null)
@@ -123,7 +122,6 @@ function EngineCapabilityCard({
       const status = await desktopInstaller.install({
         accepted: true,
         modelId: capability?.modelId,
-        token: installStatus?.requiresToken ? huggingFaceToken : undefined,
       })
       setInstallStatus(status)
       setInstallProgress({
@@ -137,7 +135,6 @@ function EngineCapabilityCard({
       const message = error instanceof Error ? error.message : String(error)
       if (!/abort|cancel/i.test(message)) setInstallError(message)
     } finally {
-      setHuggingFaceToken('')
       setInstalling(false)
     }
   }
@@ -185,7 +182,11 @@ function EngineCapabilityCard({
     }
   }
   const showGenericActions = presentation.actions.length > 0
+    && !desktopInstaller
     && !(desktopMuscriptorVerifier && capability?.weightsCached === false)
+  const displayedGates = desktopInstaller
+    ? presentation.gates.filter((gate) => gate.id !== 'access')
+    : presentation.gates
 
   return (
     <section className={`engine-capability-card ${statusClass}`} aria-label={`${title} readiness`}>
@@ -209,9 +210,9 @@ function EngineCapabilityCard({
         <div><dt>RUNTIME</dt><dd>{presentation.runtimeLabel}</dd></div>
       </dl>
 
-      {presentation.gates.length > 0 && (
+      {displayedGates.length > 0 && (
         <ul className="engine-gates" aria-label={`${title} execution gates`}>
-          {presentation.gates.map((gate) => (
+          {displayedGates.map((gate) => (
             <li key={gate.id} data-state={gate.state}>
               <span aria-hidden="true" />
               {gate.label}
@@ -286,30 +287,6 @@ function EngineCapabilityCard({
                   <a href={installStatus.terms?.gemma} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, installStatus.terms!.gemma)}>Gemma Terms of Use</a>, including their use restrictions.
                 </span>
               </label>
-              {installStatus.requiresToken && (
-                <div className="engine-gated-installer">
-                  <ol>
-                    <li>
-                      Sign in to Hugging Face and{' '}
-                      <a href={installStatus.releaseUrl} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, installStatus.releaseUrl!)}>accept Stable Audio 3 Medium access</a>
-                      {' '}with the account that will provide the token.
-                    </li>
-                    <li>Create a read-only Hugging Face token, then paste it below for this download.</li>
-                  </ol>
-                  <label className="engine-token-field">
-                    <span>Hugging Face read token</span>
-                    <input
-                      type="password"
-                      value={huggingFaceToken}
-                      disabled={installing}
-                      autoComplete="off"
-                      spellCheck={false}
-                      onChange={(event) => setHuggingFaceToken(event.target.value)}
-                    />
-                  </label>
-                  <small>The token is sent only to Hugging Face for this download. VibeSeq does not save it to disk or logs.</small>
-                </div>
-              )}
               {(installing || installProgress) && (
                 <div className="engine-download-progress">
                   <progress
@@ -333,13 +310,13 @@ function EngineCapabilityCard({
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={!termsAccepted || (installStatus.requiresToken === true && !huggingFaceToken.trim())}
+                  disabled={!termsAccepted}
                   onClick={() => void startInstallation()}
                 >
                   <Download /> Download &amp; install {formatBytes(installStatus.totalBytes)}
                 </button>
               )}
-              <small>Downloads resume after interruption. Every part and final model file is digest-verified before activation.</small>
+              <small>Downloads resume after interruption. Every final model file is digest-verified before activation.</small>
             </div>
           )}
           {desktopMuscriptorVerifier && muscriptorRevisionRoot && (

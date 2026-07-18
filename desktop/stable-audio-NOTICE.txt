@@ -9,3 +9,9 @@ ai.google.dev/gemma/terms.
 VibeSeq redistributes the unmodified Stable Audio 3 Medium optimized weights
 from stabilityai/stable-audio-3-optimized at revision
 c2949a435de2392fe49c5914c52bc174cfc05a9b.
+
+VibeSeq also redistributes the unmodified Stable Audio 3 Medium and T5Gemma
+weights for the Windows CUDA/FlashAttention 2 route from
+stabilityai/stable-audio-3-medium at revision
+27b5a21b791b1b033d193a9e1e3ce78493f102f9. Large files are split into
+GitHub Release assets without modifying their reconstructed contents.

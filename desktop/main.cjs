@@ -87,7 +87,6 @@ ipcMain.handle('stable-audio:status', async (_event, request) => {
   return {
     ...status,
     modelInstalled: status.installed,
-    requiresToken: status.requiresToken && !status.installed,
     runtimeInstalled: runtime.installed,
     installed: status.installed && runtime.installed,
   }
@@ -107,13 +106,6 @@ ipcMain.handle('stable-audio:install', async (_event, request) => {
   modelInstallPromise = (async () => {
     if (request?.modelId === stableAudioGpuManifest.modelId) {
       const modelStatus = await installer.status()
-      if (
-        !modelStatus.installed
-        && modelStatus.requiresToken
-        && !String(request?.token || '').trim()
-      ) {
-        throw new Error('Enter a Hugging Face read token before installing the gated GPU model.')
-      }
       await cudaRuntimeInstaller.install({
         signal: modelInstallController.signal,
         onProgress: (detail) => sendInstallProgress({
@@ -126,7 +118,6 @@ ipcMain.handle('stable-audio:install', async (_event, request) => {
     }
     const installed = await installer.install({
       accepted: true,
-      token: request?.token,
       signal: modelInstallController.signal,
       onProgress: sendInstallProgress,
     })
@@ -134,7 +125,6 @@ ipcMain.handle('stable-audio:install', async (_event, request) => {
     return {
       ...installed,
       modelInstalled: installed.installed,
-      requiresToken: false,
       runtimeInstalled: true,
     }
   })().finally(() => {

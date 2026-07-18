@@ -34,6 +34,7 @@ def test_exact_medium_manifest_is_immutable_and_pinned() -> None:
     assert STABLE_AUDIO_3_MEDIUM.code_revision == (
         "b32763cf3b71c160f10a0daa4fa0e0d471b5772e"
     )
+    assert STABLE_AUDIO_3_MEDIUM.redistributed is True
     assert MUSCRIPTOR_MEDIUM.model_id == "MuScriptor/muscriptor-medium"
     assert MUSCRIPTOR_MEDIUM.model_revision == (
         "f32236969308476e01fd3aae67357de5feb05a2d"
@@ -74,7 +75,7 @@ def test_apple_mlx_is_ready_with_exact_code_packages_and_weights(
     assert status["codeCached"] is True
     assert status["ready"] is True
     assert status["bootstrap"] == {
-        "kind": "huggingface-files",
+        "kind": "vibeseq-release",
         "modelId": "stabilityai/stable-audio-3-optimized",
         "revision": "c2949a435de2392fe49c5914c52bc174cfc05a9b",
         "files": [
@@ -262,6 +263,29 @@ def test_windows_4090_selects_ready_flash_attention_route(
     assert status["runtime"] == "pytorch-fa2"
     assert status["device"] == "cuda"
     assert status["ready"] is True
+
+
+def test_windows_4090_uses_public_vibeseq_release_before_weights_are_cached(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("vibeseq_inference.readiness.module_installed", lambda _: True)
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.cached_files",
+        lambda artifact, files: (False, files),
+    )
+    status = generation_capability(
+        real_settings(tmp_path),
+        probe=HardwareProbe(
+            "Windows", "AMD64", True, (8, 9), "NVIDIA GeForce RTX 4090", False
+        ),
+    )
+    assert status["route"] == "cuda-ampere-fa2"
+    assert status["weightsCached"] is False
+    assert status["accessGranted"] is True
+    assert status["accessEvidence"] == "vibeseq-release"
+    assert status["bootstrap"]["kind"] == "vibeseq-release"
+    assert status["bootstrap"]["requiresApproval"] is False
+    assert status["ready"] is False
 
 
 def test_windows_4090_blocks_instead_of_silently_falling_back_without_fa2(

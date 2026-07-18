@@ -146,7 +146,7 @@ jobs:
 
           - macOS ARM64 MLX bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-macos-arm64
           - Windows x64 CPU TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-windows-x64
-          - Windows NVIDIA Ampere-or-newer: the app installs an isolated managed Python 3.12 runtime, official PyTorch 2.7.1 CUDA 12.6 wheels, and the digest-pinned community FlashAttention 2.8.3 wheel, runs an actual FlashAttention kernel on the detected GPU, then downloads the gated exact Stable Audio 3 Medium checkpoint from Hugging Face with the user's ephemeral read token. The token is never saved.
+          - Windows NVIDIA Ampere-or-newer bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-27b5a21-windows-x64-fa2. The app installs an isolated managed Python 3.12 runtime, official PyTorch 2.7.1 CUDA 12.6 wheels, and the digest-pinned community FlashAttention 2.8.3 wheel, runs an actual FlashAttention kernel on the detected GPU, then downloads the exact release checkpoint with the same one-click flow as CPU-only systems.
           - Linux x64 TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-linux-x64
           - MuScriptor Medium: https://huggingface.co/MuScriptor/muscriptor-medium
 

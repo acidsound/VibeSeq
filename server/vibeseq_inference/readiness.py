@@ -70,7 +70,10 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
     weights_cached, missing_files = cached_files(artifact, route.required_files)
     access_granted: bool | None
     access_evidence: str | None
-    if not artifact.gated:
+    if artifact.redistributed:
+        access_granted = True
+        access_evidence = "vibeseq-release"
+    elif not artifact.gated:
         access_granted = True
         access_evidence = "public-repository"
     elif len(missing_files) < len(route.required_files):
@@ -142,12 +145,16 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
         "missingPackages": list(missing_packages),
         "requiredPackages": list(route.required_modules),
         "bootstrap": {
-            "kind": "huggingface-files",
+            "kind": (
+                "vibeseq-release"
+                if artifact.redistributed
+                else "huggingface-files"
+            ),
             "modelId": artifact.model_id,
             "revision": artifact.model_revision,
             "files": list(route.required_files),
             "accessUrl": f"https://huggingface.co/{artifact.model_id}",
-            "requiresApproval": artifact.gated,
+            "requiresApproval": artifact.gated and not artifact.redistributed,
         },
         "reason": reason,
         **artifact.provenance(),

@@ -184,13 +184,12 @@ describe('EngineDialog model installation guidance', () => {
     await waitFor(() => expect(install).toHaveBeenCalledWith({
       accepted: true,
       modelId: 'stabilityai/stable-audio-3-optimized',
-      token: undefined,
     }))
     await waitFor(() => expect(onModelInstalled).toHaveBeenCalledOnce())
     expect(screen.getByText('Apple Silicon · MLX')).not.toBeNull()
   })
 
-  it('requires a same-account Hugging Face token for the Windows FA2 model', async () => {
+  it('offers the Windows FA2 model as the same one-click release download', async () => {
     const install = vi.fn().mockResolvedValue({
       supported: true,
       platformKey: 'win32-x64',
@@ -200,7 +199,6 @@ describe('EngineDialog model installation guidance', () => {
       totalBytes: 10_443_825_499,
       revision: '27b5a21b791b1b033d193a9e1e3ce78493f102f9',
       modelInstalled: true,
-      requiresToken: false,
     })
     window.vibeseqDesktop = {
       stableAudio: {
@@ -212,8 +210,7 @@ describe('EngineDialog model installation guidance', () => {
           installedBytes: 0,
           totalBytes: 10_443_825_499,
           revision: '27b5a21b791b1b033d193a9e1e3ce78493f102f9',
-          requiresToken: true,
-          releaseUrl: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
+          releaseUrl: 'https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-27b5a21-windows-x64-fa2',
           terms: {
             stability: 'https://huggingface.co/stabilityai/stable-audio-3-medium/blob/revision/LICENSE.md',
             gemma: 'https://ai.google.dev/gemma/terms',
@@ -240,17 +237,14 @@ describe('EngineDialog model installation guidance', () => {
 
     const download = await screen.findByRole('button', { name: /Download & install 10.44 GB/ })
     fireEvent.click(screen.getByRole('checkbox'))
-    expect(download.hasAttribute('disabled')).toBe(true)
-    fireEvent.change(screen.getByLabelText('Hugging Face read token'), {
-      target: { value: 'hf_ephemeral' },
-    })
     expect(download.hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByText('Hugging Face read token')).toBeNull()
+    expect(screen.queryByText(/Approve gated access/)).toBeNull()
     fireEvent.click(download)
 
     await waitFor(() => expect(install).toHaveBeenCalledWith({
       accepted: true,
       modelId: 'stabilityai/stable-audio-3-medium',
-      token: 'hf_ephemeral',
     }))
   })
 
@@ -272,8 +266,7 @@ describe('EngineDialog model installation guidance', () => {
       installedBytes: 10_443_825_499,
       totalBytes: 10_443_825_499,
       revision: '27b5a21b791b1b033d193a9e1e3ce78493f102f9',
-      requiresToken: false,
-      releaseUrl: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
+      releaseUrl: 'https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-27b5a21-windows-x64-fa2',
       terms: {
         stability: 'https://huggingface.co/stabilityai/stable-audio-3-medium/blob/revision/LICENSE.md',
         gemma: 'https://ai.google.dev/gemma/terms',

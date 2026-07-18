@@ -124,7 +124,7 @@ test('reports an unsupported OS without downloading another platform model', asy
   await assert.rejects(() => installer.install({ accepted: true }), /not packaged for freebsd-x64/)
 })
 
-test('gated GPU model requires an ephemeral token and verifies Git blob digests', async () => {
+test('redistributed GPU model downloads from a public release without credentials', async () => {
   const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-gpu-model-installer-'))
   const digest = gitBlobSha1(gpuConfig)
   const gpuManifest = {
@@ -138,11 +138,9 @@ test('gated GPU model requires an ephemeral token and verifies Git blob digests'
     variants: {
       'win32-x64': {
         label: 'Windows CUDA FA2',
-        source: {
-          kind: 'huggingface',
+        release: {
+          tag: 'gpu-test-release',
           baseUrl,
-          accessUrl: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
-          requiresToken: true,
         },
         downloadBytes: gpuConfig.length,
         minimumFreeBytes: 100,
@@ -162,15 +160,10 @@ test('gated GPU model requires an ephemeral token and verifies Git blob digests'
     arch: 'x64',
   })
 
-  assert.equal((await installer.status()).requiresToken, true)
-  await assert.rejects(
-    () => installer.install({ accepted: true }),
-    /requires a Hugging Face read token/,
-  )
-  const result = await installer.install({ accepted: true, token: 'ephemeral-test-token' })
+  const result = await installer.install({ accepted: true })
   assert.equal(result.installed, true)
   const request = requests.find((entry) => entry.asset === 'gpu-config.json')
-  assert.equal(request.authorization, 'Bearer ephemeral-test-token')
+  assert.equal(request.authorization, undefined)
   await assert.doesNotReject(() => installer.install({ accepted: true }))
 })
 
@@ -193,8 +186,8 @@ test('shipping manifest separates all OS releases and selects the expected model
   assert.ok(windows.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
   assert.ok(linux.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
   const windowsGpu = gpuShipping.variants['win32-x64']
-  assert.equal(windowsGpu.source.kind, 'huggingface')
-  assert.equal(windowsGpu.source.requiresToken, true)
+  assert.equal(windowsGpu.release.tag, 'stable-audio-3-27b5a21-windows-x64-fa2')
+  assert.ok(windowsGpu.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
   assert.ok(windowsGpu.files.some((file) => file.destination === 'model.safetensors'))
   assert.ok(windowsGpu.files.every((file) => !file.destination.startsWith('tflite/')))
 })

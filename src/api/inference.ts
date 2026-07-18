@@ -22,6 +22,7 @@ export type EngineCapability = {
   codeRevision?: string | null
   license?: string
   gated?: boolean
+  redistributed?: boolean
   device: string
   runtime?: string
   route?: string
@@ -44,7 +45,7 @@ export type EngineCapability = {
 
 export type ModelManifestEntry = Pick<
   EngineCapability,
-  'model' | 'modelId' | 'modelRevision' | 'codeRepository' | 'codeRevision' | 'license' | 'gated'
+  'model' | 'modelId' | 'modelRevision' | 'codeRepository' | 'codeRevision' | 'license' | 'gated' | 'redistributed'
 > & { files?: string[] }
 
 export type InferenceHealth = {

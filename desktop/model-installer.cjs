@@ -79,10 +79,14 @@ const validateVariant = (manifest, variant) => {
       throw new Error(`Invalid model digest for ${file.destination}.`)
     }
     for (const part of file.parts) {
-      if (variant.source?.kind !== 'huggingface' && part.size >= 2 * 1024 * 1024 * 1024) {
+      if (part.size >= 2 * 1024 * 1024 * 1024) {
         throw new Error(`Release asset exceeds 2 GiB: ${part.asset}.`)
       }
-      if (!/^[a-f0-9]{64}$/.test(part.sha256 || '') && !/^[a-f0-9]{40}$/.test(part.gitSha1 || '')) {
+      if (
+        (part.sha256 || part.gitSha1)
+        && !/^[a-f0-9]{64}$/.test(part.sha256 || '')
+        && !/^[a-f0-9]{40}$/.test(part.gitSha1 || '')
+      ) {
         throw new Error(`Invalid asset digest for ${part.asset}.`)
       }
     }
@@ -107,7 +111,6 @@ class StableAudioModelInstaller {
     this.fetch = fetchImpl
     this.releaseBaseUrl = (
       releaseBaseUrl
-      || this.variant?.source?.baseUrl
       || this.variant?.release?.baseUrl
       || ''
     ).replace(/\/$/, '')
@@ -150,16 +153,13 @@ class StableAudioModelInstaller {
       minimumFreeBytes: this.variant.minimumFreeBytes,
       revision: this.manifest.revision,
       modelId: this.manifest.modelId,
-      releaseUrl: this.variant.source?.accessUrl || (
-        `https://github.com/${this.manifest.release.repository}/releases/tag/${this.variant.release.tag}`
-      ),
-      requiresToken: this.variant.source?.requiresToken === true,
+      releaseUrl: `https://github.com/${this.manifest.release.repository}/releases/tag/${this.variant.release.tag}`,
       terms: this.manifest.terms,
       installRoot: root,
     }
   }
 
-  async install({ accepted, token, signal, onProgress = () => {} }) {
+  async install({ accepted, signal, onProgress = () => {} }) {
     if (!this.variant) throw new Error(`Stable Audio is not packaged for ${this.key}.`)
     if (accepted !== true) throw new Error('The Stable Audio and Gemma terms must be accepted before installation.')
 
@@ -167,15 +167,6 @@ class StableAudioModelInstaller {
     const files = variantFiles(this.manifest, this.variant)
     await fsp.mkdir(root, { recursive: true })
     const before = await this.status()
-    if (
-      !before.installed
-      && this.variant.source?.requiresToken === true
-      && !String(token || '').trim()
-    ) {
-      throw new Error(
-        'This GPU model requires a Hugging Face read token after accepting the model access conditions.',
-      )
-    }
     if (!before.installed && typeof this.fetch !== 'function') {
       throw new Error('This runtime cannot download model assets.')
     }
@@ -211,12 +202,7 @@ class StableAudioModelInstaller {
         emit('verified', file.destination, 0, true)
         continue
       }
-      if (this.variant.source?.requiresToken === true && !String(token || '').trim()) {
-        throw new Error(
-          'This GPU model requires a Hugging Face read token to repair an incomplete or invalid cached file.',
-        )
-      }
-      await this.#downloadFile(file, target, signal, token, (fileBytes, asset) => {
+      await this.#downloadFile(file, target, signal, (fileBytes, asset) => {
         emit('downloading', asset, fileBytes)
       })
       completedBytes += file.size
@@ -240,7 +226,7 @@ class StableAudioModelInstaller {
     return this.status()
   }
 
-  async #downloadFile(file, target, signal, token, onBytes) {
+  async #downloadFile(file, target, signal, onBytes) {
     const partial = `${target}.vibeseq-download`
     let currentSize = Math.min(await statSize(partial), file.size)
     if (await statSize(partial) > file.size) {
@@ -252,8 +238,11 @@ class StableAudioModelInstaller {
     for (const part of file.parts) {
       const partEnd = partBase + part.size
       if (currentSize >= partEnd) {
-        const digest = await digestFile(partial, part, { start: partBase, end: partEnd - 1 })
-        if (digest !== (part.sha256 || part.gitSha1)) {
+        const expectedDigest = part.sha256 || part.gitSha1
+        const digest = expectedDigest
+          ? await digestFile(partial, part, { start: partBase, end: partEnd - 1 })
+          : null
+        if (expectedDigest && digest !== expectedDigest) {
           await fsp.truncate(partial, partBase)
           currentSize = partBase
         } else {
@@ -271,19 +260,11 @@ class StableAudioModelInstaller {
       const response = await this.fetch(url, {
         headers: {
           ...(offset > 0 ? { Range: `bytes=${offset}-` } : {}),
-          ...(this.variant.source?.requiresToken === true
-            ? { Authorization: `Bearer ${String(token).trim()}` }
-            : {}),
         },
         redirect: 'follow',
         signal,
       })
       if (!response.ok || !response.body) {
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(
-            'Hugging Face denied the GPU model download. Accept the model access conditions and use a read token from the same account.',
-          )
-        }
         throw new Error(`Could not download ${part.asset}: HTTP ${response.status}`)
       }
 
@@ -313,8 +294,11 @@ class StableAudioModelInstaller {
       if (currentSize !== partEnd) {
         throw new Error(`Downloaded size mismatch for ${part.asset}.`)
       }
-      const digest = await digestFile(partial, part, { start: partBase, end: partEnd - 1 })
-      if (digest !== (part.sha256 || part.gitSha1)) {
+      const expectedDigest = part.sha256 || part.gitSha1
+      const digest = expectedDigest
+        ? await digestFile(partial, part, { start: partBase, end: partEnd - 1 })
+        : null
+      if (expectedDigest && digest !== expectedDigest) {
         await fsp.truncate(partial, partBase)
         throw new Error(`Digest mismatch for ${part.asset}.`)
       }

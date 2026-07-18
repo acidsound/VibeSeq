@@ -1,0 +1,53 @@
+name: Stable Audio GPU model release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stable-audio-gpu-model-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish Windows CUDA model bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      GPU_MODEL_TAG: stable-audio-3-27b5a21-windows-x64-fa2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Require the maintainer model token
+        run: |
+          if [ -z "${HF_TOKEN}" ]; then
+            echo 'Add a read-only HF_TOKEN repository secret from an account that accepted the Stable Audio 3 Medium terms.' >&2
+            exit 1
+          fi
+      - name: Refuse to mutate an existing immutable model release
+        run: |
+          if gh release view "${GPU_MODEL_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "${GPU_MODEL_TAG} already exists; publish a new revision tag instead of replacing model assets." >&2
+            exit 1
+          fi
+      - name: Download, split, and verify the exact GPU checkpoint
+        run: |
+          assets="${RUNNER_TEMP}/stable-audio-gpu-assets"
+          mkdir -p "${assets}"
+          node scripts/prepare-stable-audio-gpu-release.mjs --output "${assets}"
+          (cd "${assets}" && sha256sum * > SHA256SUMS.txt)
+      - name: Create the public one-click GPU model release
+        run: |
+          assets="${RUNNER_TEMP}/stable-audio-gpu-assets"
+          gh release create "${GPU_MODEL_TAG}" "${assets}"/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title 'Stable Audio 3 Medium · Windows x64 CUDA/FlashAttention 2 · 27b5a21' \
+            --notes 'Windows x64 first-run model bundle for the NVIDIA CUDA/FlashAttention 2 route. These are the exact unmodified Stable Audio 3 Medium and T5Gemma files at the pinned revision, split only to satisfy the GitHub Release 2 GiB per-file limit. Installation requires explicit acceptance of the Stability AI Community License and Gemma Terms of Use inside VibeSeq. Powered by Stability AI.' \
+            --prerelease
