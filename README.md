@@ -30,6 +30,42 @@ a separate Colab T4 launcher. The default `procedural-demo` and `signal-demo`
 providers are deterministic workflow fixtures. They produce real WAV/MIDI files
 but are not Stable Audio 3 or MuScriptor, and the UI/provenance always says so.
 
+## Build Week collaboration with Codex and GPT-5.6
+
+VibeSeq was designed, implemented, tested, packaged, and prepared for submission
+in an iterative maker-and-Codex workflow. The submission-period code history is
+explicit: `c9ec1e6` records the initial Studio implementation on July 16, 2026;
+`21f91cd` adds the native desktop release pipeline; `363c12a` integrates the
+packaged runtimes and local storage contract; and `dd34a4f` refines the filmed
+arrangement workflow. Later commits retain the same dated boundary. If an idea
+or experiment predates that boundary, it is not presented as evaluated
+Build Week implementation work.
+
+Codex and GPT-5.6 accelerated four concrete parts of the project:
+
+- researched musician workflows and translated them into the interaction and
+  production contracts under `docs/product/`;
+- turned one English UI brief into two distinct desktop/mobile directions in
+  `docs/design/candidates/`, compared their usability, selected Candidate A,
+  and recorded the reasons in `docs/design/visual-language.md`;
+- implemented and tested the local-first Audio/MIDI editor, persistence,
+  playback/export, real-model adapters, desktop packaging, and regression
+  coverage, while the maker made the product and musical decisions;
+- built the reproducible submission-video pipeline in `promo/`, including real
+  packaged-app capture, E-minor/120 BPM source generation, exact narration
+  placement, beat-aligned cumulative mixing, functional camera moves, and
+  automated audiovisual QA.
+
+The maker retained the consequential decisions: the `Apps for Your Life`
+positioning, arrangement-first UX, local-first boundary,
+model/license constraints, E natural minor and 120 BPM music contract, one-time
+wordless vocal peak, bass timing, and every listening/visual approval. Codex
+produced the options, selected the more user-friendly UX candidate, implemented
+and tested it, and assembled the evidence; it did not set the product purpose,
+musical direction, or license boundaries. Timestamped Codex
+session evidence and the required `/feedback` session ID accompany the Devpost
+submission.
+
 ## Start the verified local slice
 
 Node 24 is pinned in `.nvmrc`.

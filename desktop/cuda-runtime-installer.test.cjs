@@ -131,7 +131,7 @@ test('does not offer the CUDA runtime on CPU-only packaged platforms', async () 
   await assert.rejects(() => installer.install({}), /only for Windows x64/)
 })
 
-test('repairs an incomplete FlashAttention metadata cache with a no-cache retry', async () => {
+test('repairs the specific package behind an incomplete uv metadata cache', async () => {
   const resourceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-cuda-repair-resource-'))
   const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-cuda-repair-storage-'))
   const { projectRoot } = await fixtureProject(resourceRoot)
@@ -146,8 +146,9 @@ test('repairs an incomplete FlashAttention metadata cache with a no-cache retry'
     syncAttempts += 1
     if (syncAttempts === 1) {
       throw new Error(
-        'Failed to generate package metadata for flash-attn: '
-        + 'failed to open cache/uv/archive-v0/broken/flash_attn-2.8.3.dist-info/METADATA',
+        'Failed to install build dependencies for muscriptor: '
+        + 'failed to open G:\\VibeSeq Data\\cache\\uv\\archive-v0\\broken'
+        + '\\pluggy-1.6.0.dist-info\\METADATA',
       )
     }
     await fs.mkdir(path.dirname(paths.python), { recursive: true })
@@ -163,12 +164,95 @@ test('repairs an incomplete FlashAttention metadata cache with a no-cache retry'
     runImpl,
   })
 
-  const installed = await installer.install({})
+  const installed = await installer.install({ profile: 'muscriptor' })
 
   assert.equal(installed.installed, true)
   assert.equal(syncAttempts, 2)
-  assert.deepEqual(commands[0].args, ['cache', 'clean', 'flash-attn'])
-  assert.equal(commands[1].args.includes('--no-cache'), false)
+  assert.equal(installed.muscriptorInstalled, true)
+  assert.equal(commands[0].args.includes('--no-cache'), false)
+  assert.deepEqual(commands[1].args, ['cache', 'clean', 'pluggy'])
+  assert.deepEqual(commands[2].args.slice(-2), ['--refresh-package', 'pluggy'])
+  assert.equal(commands[2].args.includes('--no-cache'), false)
+})
+
+test('falls back to an isolated temporary cache when targeted metadata repair also fails', async () => {
+  const resourceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-cuda-fallback-resource-'))
+  const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-cuda-fallback-storage-'))
+  const { projectRoot } = await fixtureProject(resourceRoot)
+  const paths = runtimePaths(storageRoot)
+  await fs.mkdir(path.dirname(paths.uv), { recursive: true })
+  await fs.writeFile(paths.uv, 'fixture executable')
+  const commands = []
+  let syncAttempts = 0
+  const runImpl = async (options) => {
+    commands.push(options)
+    if (options.args[0] !== 'sync') return ''
+    syncAttempts += 1
+    if (syncAttempts < 3) {
+      const packageName = syncAttempts === 1 ? 'pluggy-1.6.0' : 'setuptools-83.0.0'
+      throw new Error(
+        `failed to open cache/uv/archive-v0/broken/${packageName}.dist-info/METADATA`,
+      )
+    }
+    await fs.mkdir(path.dirname(paths.python), { recursive: true })
+    await fs.writeFile(paths.python, 'fixture python')
+    await fs.writeFile(paths.configuration, 'home = fixture\n')
+    return ''
+  }
+  const installer = new CudaRuntimeInstaller({
+    storageRoot,
+    projectRoot,
+    platform: 'win32',
+    arch: 'x64',
+    runImpl,
+  })
+
+  const installed = await installer.install({ profile: 'muscriptor' })
+
+  assert.equal(installed.muscriptorInstalled, true)
+  assert.equal(syncAttempts, 3)
+  assert.deepEqual(commands[1].args, ['cache', 'clean', 'pluggy'])
+  assert.equal(commands[2].args.includes('--no-cache'), false)
+  assert.equal(commands[3].args.includes('--no-cache'), true)
+})
+
+test('uses an isolated temporary cache when the damaged package cache cannot be cleaned', async () => {
+  const resourceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-cuda-locked-resource-'))
+  const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-cuda-locked-storage-'))
+  const { projectRoot } = await fixtureProject(resourceRoot)
+  const paths = runtimePaths(storageRoot)
+  await fs.mkdir(path.dirname(paths.uv), { recursive: true })
+  await fs.writeFile(paths.uv, 'fixture executable')
+  const commands = []
+  let syncAttempts = 0
+  const runImpl = async (options) => {
+    commands.push(options)
+    if (options.args[0] === 'cache') throw new Error('cache lock unavailable')
+    if (options.args[0] !== 'sync') return ''
+    syncAttempts += 1
+    if (syncAttempts === 1) {
+      throw new Error(
+        'failed to open cache/uv/archive-v0/broken/pluggy-1.6.0.dist-info/METADATA',
+      )
+    }
+    await fs.mkdir(path.dirname(paths.python), { recursive: true })
+    await fs.writeFile(paths.python, 'fixture python')
+    await fs.writeFile(paths.configuration, 'home = fixture\n')
+    return ''
+  }
+  const installer = new CudaRuntimeInstaller({
+    storageRoot,
+    projectRoot,
+    platform: 'win32',
+    arch: 'x64',
+    runImpl,
+  })
+
+  const installed = await installer.install({ profile: 'muscriptor' })
+
+  assert.equal(installed.muscriptorInstalled, true)
+  assert.equal(syncAttempts, 2)
+  assert.deepEqual(commands[1].args, ['cache', 'clean', 'pluggy'])
   assert.equal(commands[2].args.includes('--no-cache'), true)
 })
 

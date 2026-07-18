@@ -1,7 +1,7 @@
-import chaosKickUrl from '../../assets/midi/12836_0_Chaos_sf2_file.mp3?url'
-import chaosSnareUrl from '../../assets/midi/12838_0_Chaos_sf2_file.mp3?url'
-import chaosClosedHatUrl from '../../assets/midi/12842_0_Chaos_sf2_file.mp3?url'
-import chaosOpenHatUrl from '../../assets/midi/12846_0_Chaos_sf2_file.mp3?url'
+import chaosKickUrl from '../../assets/midi/12836_0_Chaos_sf2_file.mp3?no-inline'
+import chaosSnareUrl from '../../assets/midi/12838_0_Chaos_sf2_file.mp3?no-inline'
+import chaosClosedHatUrl from '../../assets/midi/12842_0_Chaos_sf2_file.mp3?no-inline'
+import chaosOpenHatUrl from '../../assets/midi/12846_0_Chaos_sf2_file.mp3?no-inline'
 import { chaosDrumAssetId, type ChaosDrumSampleNote } from './midiInstrumentRender'
 
 export interface BuiltinMidiAssetSource {

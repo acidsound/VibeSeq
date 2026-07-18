@@ -426,6 +426,22 @@ def test_target_models_are_medium_and_small_overrides_are_rejected(
             True,
             False,
         ),
+        (
+            HardwareProbe(
+                "Linux",
+                "x86_64",
+                False,
+                (8, 9),
+                "NVIDIA GeForce RTX 4090",
+                False,
+                cuda_hardware_detected=True,
+            ),
+            "local",
+            "cpu-tflite",
+            "tflite-w8a8-dyn",
+            True,
+            False,
+        ),
     ],
 )
 def test_stable_audio_medium_runtime_matrix(

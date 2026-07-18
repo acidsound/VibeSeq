@@ -171,6 +171,39 @@ def test_cpu_tflite_is_ready_only_with_exact_code_packages_and_weights(
     ]
 
 
+def test_linux_appimage_uses_cpu_tflite_when_nvidia_driver_is_visible(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("vibeseq_inference.readiness.module_installed", lambda _: True)
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.cached_files",
+        lambda *_: (True, ()),
+    )
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.tflite_code_cached",
+        lambda: True,
+    )
+    status = generation_capability(
+        real_settings(tmp_path),
+        probe=HardwareProbe(
+            "Linux",
+            "x86_64",
+            False,
+            (8, 9),
+            "NVIDIA GeForce RTX 4090",
+            False,
+            cuda_hardware_detected=True,
+        ),
+    )
+
+    assert status["preferredRoute"] == "cpu-tflite"
+    assert status["routePriority"] == ["cpu-tflite"]
+    assert status["route"] == "cpu-tflite"
+    assert status["runtime"] == "tflite-w8a8-dyn"
+    assert status["device"] == "cpu"
+    assert status["ready"] is True
+
+
 def test_cpu_tflite_reports_only_the_packages_that_are_actually_missing(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -147,10 +147,21 @@ def stable_audio_runtime_routes(
 
     hardware = probe or HardwareProbe.detect()
     routes: list[RuntimeRoute] = []
+    # The Linux AppImage deliberately bundles CPU-only PyTorch and LiteRT. An
+    # NVIDIA driver may still make nvidia-smi report the GPU, but unlike the
+    # Windows package there is no managed Linux CUDA runtime to activate. Keep
+    # the hardware facts visible without selecting an unusable CUDA route.
+    # Linux CUDA targets such as Colab remain eligible when their own PyTorch
+    # runtime has actually passed torch.cuda.is_available().
     cuda_hardware_available = bool(
         hardware.cuda_available
-        or hardware.cuda_hardware_detected
-        or hardware.cuda_capability is not None
+        or (
+            hardware.system == "Windows"
+            and (
+                hardware.cuda_hardware_detected
+                or hardware.cuda_capability is not None
+            )
+        )
     )
     cuda_fa2_hardware = False
 

@@ -77,11 +77,15 @@ const readMarker = async (filename) => {
   }
 }
 
-const isFlashAttentionCacheMetadataError = (error) => {
-  const message = String(error?.message || error).toLowerCase()
-  return message.includes(FLASH_ATTENTION_PACKAGE)
-    && message.includes('metadata')
-    && (message.includes('archive-v') || message.includes('cache'))
+const uvCacheMetadataPackage = (error) => {
+  const message = String(error?.message || error).replaceAll('\\', '/')
+  const lower = message.toLowerCase()
+  if (
+    !lower.includes('metadata')
+    || (!lower.includes('/archive-v') && !lower.includes('cache'))
+  ) return null
+  const match = message.match(/\/([^/]+?)-\d[^/]*\.dist-info\/METADATA\b/i)
+  return match?.[1]?.replaceAll('_', '-').toLowerCase() || ''
 }
 
 const run = ({ command, args, cwd, env, signal, onLine = () => {} }) => new Promise((resolve, reject) => {
@@ -255,32 +259,52 @@ class CudaRuntimeInstaller {
       '--reinstall-package',
       profileConfiguration.package,
     ]
-    if (useTemporaryCache) syncArgs.push('--no-cache')
     onProgress(profileConfiguration.progress)
+    const runSync = (args) => this.run({
+      command: paths.uv,
+      args,
+      cwd: this.projectRoot,
+      env: environment,
+      signal,
+      onLine: onProgress,
+    })
+    const firstSyncArgs = useTemporaryCache ? [...syncArgs, '--no-cache'] : syncArgs
     try {
-      await this.run({
-        command: paths.uv,
-        args: syncArgs,
-        cwd: this.projectRoot,
-        env: environment,
-        signal,
-        onLine: onProgress,
-      })
+      await runSync(firstSyncArgs)
     } catch (error) {
-      if (
-        profile !== 'stable-audio'
-        || useTemporaryCache
-        || !isFlashAttentionCacheMetadataError(error)
-      ) throw error
-      onProgress('Retrying the FlashAttention wheel with an isolated temporary cache')
-      await this.run({
-        command: paths.uv,
-        args: [...syncArgs, '--no-cache'],
-        cwd: this.projectRoot,
-        env: environment,
-        signal,
-        onLine: onProgress,
-      })
+      const damagedPackage = uvCacheMetadataPackage(error)
+      if (damagedPackage === null) throw error
+      let repaired = false
+      if (!useTemporaryCache && damagedPackage) {
+        onProgress(`Repairing the corrupted ${damagedPackage} package cache`)
+        let cacheCleaned = false
+        try {
+          await this.run({
+            command: paths.uv,
+            args: ['cache', 'clean', damagedPackage],
+            cwd: this.projectRoot,
+            env: environment,
+            signal,
+            onLine: onProgress,
+          })
+          cacheCleaned = true
+        } catch (cleanError) {
+          if (signal?.aborted) throw cleanError
+          onProgress(`Could not clean the shared ${damagedPackage} cache; isolating the retry`)
+        }
+        if (cacheCleaned) {
+          try {
+            await runSync([...syncArgs, '--refresh-package', damagedPackage])
+            repaired = true
+          } catch (retryError) {
+            if (uvCacheMetadataPackage(retryError) === null) throw retryError
+          }
+        }
+      }
+      if (!repaired) {
+        onProgress('Retrying the managed CUDA packages with an isolated temporary cache')
+        await runSync([...syncArgs, '--no-cache'])
+      }
     }
 
     onProgress('Installing the release-matched VibeSeq CUDA worker')
