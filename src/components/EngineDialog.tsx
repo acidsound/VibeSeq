@@ -80,18 +80,26 @@ function EngineCapabilityCard({
     ? window.vibeseqDesktop?.muscriptor
     : undefined
   const desktopModelCache = window.vibeseqDesktop?.modelCache
+  const showModelInstallation = Boolean(
+    capability?.bootstrap
+    && (
+      capability.weightsCached === false
+      || (desktopInstaller && capability.ready === false)
+    ),
+  )
   const [installStatus, setInstallStatus] = useState<StableAudioInstallStatus | null>(null)
   const [installProgress, setInstallProgress] = useState<StableAudioInstallProgress | null>(null)
   const [installing, setInstalling] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
+  const [huggingFaceToken, setHuggingFaceToken] = useState('')
   const [installError, setInstallError] = useState<string | null>(null)
   const [verifyingMuscriptor, setVerifyingMuscriptor] = useState(false)
   const [muscriptorVerifyError, setMuscriptorVerifyError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!desktopInstaller || capability?.weightsCached !== false) return
+    if (!desktopInstaller || capability?.ready !== false) return
     let active = true
-    void desktopInstaller.status().then((status) => {
+    void desktopInstaller.status(capability.modelId).then((status) => {
       if (active) setInstallStatus(status)
     }).catch((error) => {
       if (active) setInstallError(error instanceof Error ? error.message : String(error))
@@ -105,14 +113,18 @@ function EngineCapabilityCard({
       active = false
       unsubscribe()
     }
-  }, [capability?.weightsCached, desktopInstaller])
+  }, [capability?.modelId, capability?.ready, desktopInstaller])
 
   const startInstallation = async () => {
     if (!desktopInstaller || !termsAccepted) return
     setInstallError(null)
     setInstalling(true)
     try {
-      const status = await desktopInstaller.install(true)
+      const status = await desktopInstaller.install({
+        accepted: true,
+        modelId: capability?.modelId,
+        token: installStatus?.requiresToken ? huggingFaceToken : undefined,
+      })
       setInstallStatus(status)
       setInstallProgress({
         phase: 'complete',
@@ -125,6 +137,7 @@ function EngineCapabilityCard({
       const message = error instanceof Error ? error.message : String(error)
       if (!/abort|cancel/i.test(message)) setInstallError(message)
     } finally {
+      setHuggingFaceToken('')
       setInstalling(false)
     }
   }
@@ -227,7 +240,7 @@ function EngineCapabilityCard({
         </div>
       )}
 
-      {capability?.weightsCached === false && capability.bootstrap && (
+      {showModelInstallation && capability?.bootstrap && (
         <div className="engine-model-install" role="note" aria-label={`${title} model installation`}>
           <b>{desktopMuscriptorVerifier ? 'VERIFY MODEL FILES' : 'MODEL INSTALL'}</b>
           <dl>
@@ -273,16 +286,43 @@ function EngineCapabilityCard({
                   <a href={installStatus.terms?.gemma} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, installStatus.terms!.gemma)}>Gemma Terms of Use</a>, including their use restrictions.
                 </span>
               </label>
+              {installStatus.requiresToken && (
+                <div className="engine-gated-installer">
+                  <ol>
+                    <li>
+                      Sign in to Hugging Face and{' '}
+                      <a href={installStatus.releaseUrl} target="_blank" rel="noreferrer" onClick={(event) => openExternal(event, installStatus.releaseUrl!)}>accept Stable Audio 3 Medium access</a>
+                      {' '}with the account that will provide the token.
+                    </li>
+                    <li>Create a read-only Hugging Face token, then paste it below for this download.</li>
+                  </ol>
+                  <label className="engine-token-field">
+                    <span>Hugging Face read token</span>
+                    <input
+                      type="password"
+                      value={huggingFaceToken}
+                      disabled={installing}
+                      autoComplete="off"
+                      spellCheck={false}
+                      onChange={(event) => setHuggingFaceToken(event.target.value)}
+                    />
+                  </label>
+                  <small>The token is sent only to Hugging Face for this download. VibeSeq does not save it to disk or logs.</small>
+                </div>
+              )}
               {(installing || installProgress) && (
                 <div className="engine-download-progress">
                   <progress
                     max={installProgress?.totalBytes || installStatus.totalBytes}
-                    value={installProgress?.downloadedBytes ?? installStatus.installedBytes}
+                    value={installProgress?.phase === 'runtime'
+                      ? undefined
+                      : installProgress?.downloadedBytes ?? installStatus.installedBytes}
                     aria-label="Stable Audio model download progress"
                   />
                   <small>
-                    {formatBytes(installProgress?.downloadedBytes ?? installStatus.installedBytes)} / {formatBytes(installStatus.totalBytes)}
-                    {installProgress?.asset ? ` · ${installProgress.asset}` : ''}
+                    {installProgress?.phase === 'runtime'
+                      ? `CUDA runtime · ${installProgress.asset || 'Installing isolated Python and GPU packages'}`
+                      : `${formatBytes(installProgress?.downloadedBytes ?? installStatus.installedBytes)} / ${formatBytes(installStatus.totalBytes)}${installProgress?.asset ? ` · ${installProgress.asset}` : ''}`}
                   </small>
                 </div>
               )}
@@ -290,9 +330,16 @@ function EngineCapabilityCard({
               {installing ? (
                 <button type="button" className="secondary-button" onClick={() => void cancelInstallation()}><Square /> Cancel download</button>
               ) : (
-                <button type="button" className="primary-button" disabled={!termsAccepted} onClick={() => void startInstallation()}><Download /> Download &amp; install {formatBytes(installStatus.totalBytes)}</button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={!termsAccepted || (installStatus.requiresToken === true && !huggingFaceToken.trim())}
+                  onClick={() => void startInstallation()}
+                >
+                  <Download /> Download &amp; install {formatBytes(installStatus.totalBytes)}
+                </button>
               )}
-              <small>Downloads resume after interruption. Every part and final model file is SHA-256 verified before activation.</small>
+              <small>Downloads resume after interruption. Every part and final model file is digest-verified before activation.</small>
             </div>
           )}
           {desktopMuscriptorVerifier && muscriptorRevisionRoot && (

@@ -51,7 +51,11 @@ Stable Audio runtime routes are selected explicitly:
   fallback. MLX is preferred; the CPU route uses the official `w8a8-dyn`
   medium DiT and SAME-L decoder and never switches to a small model.
 - Ampere-or-newer CUDA: pinned PyTorch medium code and weights with
-  FlashAttention 2.
+  FlashAttention 2. The Windows desktop installs official PyTorch 2.7.1 CUDA
+  12.6 and a digest-pinned community FlashAttention 2.8.3 wheel into an
+  isolated managed Python under `VibeSeq Data/runtimes`. It runs a real
+  FlashAttention kernel before marking that route ready and never modifies a
+  system Python.
 - Colab T4: pinned PyTorch medium through the upstream SDPA/chunked path. This
   route is provisional and disabled unless `VIBESEQ_ENABLE_PROVISIONAL_T4=1`.
   Colab targets never silently switch to the desktop CPU fallback.
@@ -74,8 +78,9 @@ explicit test/operator choice, not an automatic remote or model-size fallback.
 `accessGranted`, `runtimeCompatible`, and `ready` separately. It also includes
 the exact model/code revisions, route priority, selected and fallback routes,
 and a data-only bootstrap descriptor (`modelId`, `revision`, required files,
-and access URL). When the preferred GPU route is unavailable but the CPU route
-is ready, the selected route is truthfully reported as `cpu-tflite`. Token
+and access URL). FlashAttention-compatible NVIDIA hardware exposes only
+`cuda-ampere-fa2`; a missing or failed CUDA runtime blocks generation instead
+of selecting `cpu-tflite`. CPU-only hosts select `cpu-tflite` directly. Token
 presence alone is not treated as proof of gated access.
 
 The pinned production candidates are:

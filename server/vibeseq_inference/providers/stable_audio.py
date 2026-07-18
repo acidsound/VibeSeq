@@ -1,22 +1,24 @@
 from __future__ import annotations
 
-import json
 import math
-import os
 import threading
-from importlib.util import find_spec
 from pathlib import Path
 
 import numpy as np
 
 from ..audio import peak_envelope, read_wave, write_pcm16_wave
 from ..devices import RuntimeRoute, stable_audio_execution_routes
-from ..model_manifest import MODEL_MANIFEST, STABLE_AUDIO_3_MEDIUM
+from ..model_manifest import MODEL_MANIFEST
 from ..models import GenerateRequest
 from ..security import safe_error_message
+from ..stable_audio_config import (
+    install_pinned_model_config as _install_pinned_model_config,
+    pinned_stable_audio_files,
+)
+from ..stable_audio_cuda import run_cuda_generation
 from ..stable_audio_mlx import run_mlx_generation
 from ..stable_audio_tflite import run_tflite_generation
-from ..storage_paths import model_config_dir
+from ..storage_paths import cuda_runtime_python
 from .base import (
     GenerationArtifact,
     JobCancelled,
@@ -31,60 +33,9 @@ def _short_error(exc: BaseException) -> str:
 
 
 def _pinned_stable_audio_files() -> tuple[str, str]:
-    try:
-        from huggingface_hub import hf_hub_download
-    except ImportError as exc:
-        raise ProviderUnavailable(
-            "huggingface-hub is required to resolve the exact Stable Audio 3 "
-            "medium revision."
-        ) from exc
-    artifact = STABLE_AUDIO_3_MEDIUM
-    resolved = {
-        filename: hf_hub_download(
-            repo_id=artifact.model_id,
-            filename=filename,
-            revision=artifact.model_revision,
-        )
-        for filename in artifact.files
-    }
+    """Compatibility entrypoint for tests and external server integrations."""
 
-    # The upstream config points Transformers at the repository's moving
-    # default branch for T5Gemma. Rewrite only the local resolved config so the
-    # conditioner loads from the exact pinned snapshot as well.
-    config_data = json.loads(Path(resolved["model_config.json"]).read_text())
-    text_encoder_dir = str(Path(resolved["t5gemma-b-b-ul2/config.json"]).parent)
-    for conditioner in config_data["model"]["conditioning"]["configs"]:
-        if conditioner.get("type") == "t5gemma":
-            config = conditioner["config"]
-            config["model_path"] = text_encoder_dir
-            config.pop("repo_id", None)
-            config.pop("subfolder", None)
-
-    cache_dir = model_config_dir()
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    pinned_config = cache_dir / (
-        f"stable-audio-3-medium-{artifact.model_revision}-v1.json"
-    )
-    temporary = pinned_config.with_suffix(f".tmp-{os.getpid()}")
-    temporary.write_text(
-        json.dumps(config_data, sort_keys=True, separators=(",", ":")),
-        encoding="utf-8",
-    )
-    os.replace(temporary, pinned_config)
-    return str(pinned_config), resolved["model.safetensors"]
-
-
-class _PinnedStableAudioConfig:
-    def resolve(self) -> tuple[str, str]:
-        return _pinned_stable_audio_files()
-
-
-def _install_pinned_model_config() -> None:
-    from stable_audio_3.model_configs import all_models
-
-    # StableAudioModel.from_pretrained accepts an alias rather than a revision.
-    # Replacing only that alias's resolver makes both downloads revision-exact.
-    all_models["medium"] = _PinnedStableAudioConfig()
+    return pinned_stable_audio_files()
 
 
 class StableAudio3Provider:
@@ -130,10 +81,20 @@ class StableAudio3Provider:
                     "the medium model license before selecting provider "
                     "'stable-audio-3'."
                 ) from exc
-            if route.id == "cuda-ampere-fa2" and find_spec("flash_attn") is None:
-                raise ProviderUnavailable(
-                    "The Ampere Stable Audio 3 medium route requires flash-attn."
-                )
+            if route.id == "cuda-ampere-fa2":
+                try:
+                    from flash_attn import flash_attn_func, flash_attn_kvpacked_func
+                except (ImportError, OSError, RuntimeError) as exc:
+                    raise ProviderUnavailable(
+                        "The Ampere Stable Audio 3 medium route requires a "
+                        "loadable FlashAttention 2 CUDA extension."
+                    ) from exc
+                if not callable(flash_attn_func) or not callable(
+                    flash_attn_kvpacked_func
+                ):
+                    raise ProviderUnavailable(
+                        "The bundled FlashAttention 2 extension is incomplete."
+                    )
             _install_pinned_model_config()
             model = StableAudioModel.from_pretrained(
                 "medium",
@@ -175,6 +136,39 @@ class StableAudio3Provider:
                 raise JobCancelled("Generation was cancelled.")
             progress(0.05 + 0.12 * index / max(1, len(routes)))
             try:
+                if route.id == "cuda-ampere-fa2" and cuda_runtime_python() is not None:
+                    result = run_cuda_generation(
+                        prompt=(
+                            request.prompt
+                            if "bpm" in request.prompt.lower()
+                            else f"{request.prompt}, {request.bpm:g} BPM"
+                        ),
+                        duration=request.duration,
+                        seed=request.seed,
+                        output_path=output_path,
+                        progress=progress,
+                        cancelled=cancelled,
+                    )
+                    audio, sample_rate = read_wave(output_path)
+                    sample_count = audio.shape[-1]
+                    artifact = MODEL_MANIFEST[route.artifact_key]
+                    return GenerationArtifact(
+                        duration=sample_count / sample_rate,
+                        sample_rate=sample_rate,
+                        provider=self.name,
+                        device=route.device,
+                        peaks=peak_envelope(audio),
+                        model=artifact.model,
+                        model_id=artifact.model_id,
+                        model_revision=artifact.model_revision,
+                        code_revision=artifact.code_revision,
+                        runtime=route.runtime,
+                        route=route.id,
+                        source_peak=result.source_peak,
+                        output_peak=result.output_peak,
+                        peak_protection_applied=result.peak_protection_applied,
+                        peak_attenuation_db=result.peak_attenuation_db,
+                    )
                 if route.id == "apple-mlx":
                     result = run_mlx_generation(
                         prompt=(
@@ -295,6 +289,13 @@ class StableAudio3Provider:
             except Exception as exc:
                 failures.append(f"{route.id} ({_short_error(exc)})")
                 self._evict(route)
+                if route.id == "cuda-ampere-fa2":
+                    raise ProviderUnavailable(
+                        "Stable Audio 3 medium failed on the required "
+                        "FlashAttention 2 CUDA route "
+                        f"({failures[-1]}). CPU fallback is disabled on "
+                        "FlashAttention-compatible NVIDIA hardware."
+                    ) from exc
 
         raise ProviderUnavailable(
             "Stable Audio 3 medium failed on every executable route "

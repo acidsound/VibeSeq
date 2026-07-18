@@ -11,6 +11,7 @@ from .devices import (
     stable_audio_runtime_routes,
 )
 from .model_manifest import MODEL_MANIFEST, ModelArtifact
+from .storage_paths import cuda_runtime_ready
 
 
 def mlx_code_cached() -> bool:
@@ -27,8 +28,12 @@ def tflite_code_cached() -> bool:
 
 def module_installed(module: str) -> bool:
     try:
+        if module == "flash_attn":
+            from flash_attn import flash_attn_func, flash_attn_kvpacked_func
+
+            return callable(flash_attn_func) and callable(flash_attn_kvpacked_func)
         return find_spec(module) is not None
-    except (ImportError, ModuleNotFoundError, ValueError, AttributeError):
+    except (ImportError, ModuleNotFoundError, OSError, RuntimeError, ValueError, AttributeError):
         return False
 
 
@@ -55,8 +60,11 @@ def cached_files(
 
 def _route_status(route: RuntimeRoute) -> dict[str, Any]:
     artifact = MODEL_MANIFEST[route.artifact_key]
-    missing_packages = tuple(
-        name for name in route.required_modules if not module_installed(name)
+    isolated_cuda_ready = route.id == "cuda-ampere-fa2" and cuda_runtime_ready()
+    missing_packages = (
+        ()
+        if isolated_cuda_ready
+        else tuple(name for name in route.required_modules if not module_installed(name))
     )
     package_installed = not missing_packages
     weights_cached, missing_files = cached_files(artifact, route.required_files)
@@ -87,6 +95,7 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
         and code_cached
         and access_granted is True
         and route.hardware_compatible
+        and route.runtime_compatible
         and route.adapter_implemented
         and route.execution_enabled
     )
@@ -97,6 +106,8 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
         reason = route.reason or "The selected runtime adapter is not implemented."
     elif not route.execution_enabled:
         reason = route.reason or "The selected runtime route is disabled."
+    elif not route.runtime_compatible:
+        reason = route.reason or "The selected runtime is incompatible with this build."
     elif not package_installed:
         reason = "Missing runtime package(s): " + ", ".join(missing_packages)
     elif not weights_cached:
@@ -122,7 +133,7 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
         "codeCached": code_cached,
         "accessGranted": access_granted,
         "accessEvidence": access_evidence,
-        "runtimeCompatible": route.hardware_compatible,
+        "runtimeCompatible": route.hardware_compatible and route.runtime_compatible,
         "adapterImplemented": route.adapter_implemented,
         "executionEnabled": route.execution_enabled,
         "provisional": route.provisional,

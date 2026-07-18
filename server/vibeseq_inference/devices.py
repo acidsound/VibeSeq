@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import platform
+import subprocess
 from dataclasses import dataclass
+
+from .storage_paths import cuda_runtime_ready
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,6 +15,8 @@ class HardwareProbe:
     cuda_capability: tuple[int, int] | None
     cuda_name: str | None
     mps_available: bool
+    cuda_hardware_detected: bool = False
+    cuda_runtime: str | None = None
 
     @classmethod
     def detect(cls) -> "HardwareProbe":
@@ -19,17 +24,53 @@ class HardwareProbe:
         cuda_capability: tuple[int, int] | None = None
         cuda_name: str | None = None
         mps_available = False
+        cuda_hardware_detected = False
+        cuda_runtime: str | None = None
         try:
             import torch
 
             cuda_available = bool(torch.cuda.is_available())
+            cuda_runtime = getattr(torch.version, "cuda", None)
             if cuda_available:
+                cuda_hardware_detected = True
                 cuda_capability = tuple(torch.cuda.get_device_capability(0))
                 cuda_name = str(torch.cuda.get_device_name(0))
             mps = getattr(torch.backends, "mps", None)
             mps_available = bool(mps is not None and mps.is_available())
         except (ImportError, RuntimeError, TypeError):
             pass
+        if not cuda_hardware_detected and platform.system() in {"Linux", "Windows"}:
+            try:
+                completed = subprocess.run(
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=name,compute_cap",
+                        "--format=csv,noheader",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    creationflags=(
+                        subprocess.CREATE_NO_WINDOW
+                        if platform.system() == "Windows"
+                        else 0
+                    ),
+                )
+                first_gpu = completed.stdout.strip().splitlines()[0]
+                name, capability = (part.strip() for part in first_gpu.rsplit(",", 1))
+                major, minor = (int(part) for part in capability.split(".", 1))
+                cuda_hardware_detected = True
+                cuda_capability = (major, minor)
+                cuda_name = name
+            except (
+                FileNotFoundError,
+                IndexError,
+                OSError,
+                subprocess.SubprocessError,
+                ValueError,
+            ):
+                pass
         return cls(
             system=platform.system(),
             machine=platform.machine(),
@@ -37,6 +78,8 @@ class HardwareProbe:
             cuda_capability=cuda_capability,
             cuda_name=cuda_name,
             mps_available=mps_available,
+            cuda_hardware_detected=cuda_hardware_detected,
+            cuda_runtime=cuda_runtime,
         )
 
 
@@ -49,6 +92,7 @@ class RuntimeRoute:
     required_modules: tuple[str, ...]
     required_files: tuple[str, ...]
     hardware_compatible: bool = True
+    runtime_compatible: bool = True
     adapter_implemented: bool = True
     provisional: bool = False
     execution_enabled: bool = True
@@ -102,6 +146,12 @@ def stable_audio_runtime_routes(
 
     hardware = probe or HardwareProbe.detect()
     routes: list[RuntimeRoute] = []
+    cuda_hardware_available = bool(
+        hardware.cuda_available
+        or hardware.cuda_hardware_detected
+        or hardware.cuda_capability is not None
+    )
+    cuda_fa2_hardware = False
 
     if not force_cpu and hardware.system == "Darwin" and hardware.machine == "arm64":
         routes.append(
@@ -126,19 +176,32 @@ def stable_audio_runtime_routes(
         )
     elif (
         not force_cpu
-        and hardware.cuda_available
+        and cuda_hardware_available
         and hardware.cuda_capability is not None
     ):
         major, minor = hardware.cuda_capability
         if major >= 8:
+            cuda_fa2_hardware = True
+            cuda_runtime_available = hardware.cuda_available or cuda_runtime_ready()
             routes.append(
                 RuntimeRoute(
                     id="cuda-ampere-fa2",
                     runtime="pytorch-fa2",
                     device="cuda",
                     artifact_key="stable-audio-3-medium-pytorch",
-                    required_modules=("stable_audio_3", "flash_attn"),
+                    required_modules=("torch", "stable_audio_3", "flash_attn"),
                     required_files=STABLE_AUDIO_PYTORCH_FILES,
+                    runtime_compatible=cuda_runtime_available,
+                    reason=(
+                        None
+                        if cuda_runtime_available
+                        else (
+                            "A FlashAttention-compatible NVIDIA GPU was detected, "
+                            "but the isolated VibeSeq CUDA/FlashAttention runtime "
+                            "has not passed its on-device kernel check. CPU fallback "
+                            "is intentionally disabled on this hardware."
+                        )
+                    ),
                 )
             )
         elif target == "colab-t4" and (major, minor) == (7, 5):
@@ -159,7 +222,7 @@ def stable_audio_runtime_routes(
                 )
             )
 
-    if target == "local":
+    if target == "local" and (force_cpu or not cuda_fa2_hardware):
         routes.append(
             RuntimeRoute(
                 id="cpu-tflite",
@@ -204,6 +267,7 @@ def stable_audio_execution_routes(
             force_cpu=force_cpu,
         )
         if route.hardware_compatible
+        and route.runtime_compatible
         and route.adapter_implemented
         and route.execution_enabled
     )

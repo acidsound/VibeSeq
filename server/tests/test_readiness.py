@@ -13,6 +13,7 @@ from vibeseq_inference.readiness import (
     generation_capability,
     transcription_capability,
 )
+from vibeseq_inference.storage_paths import CUDA_RUNTIME_BUNDLE
 
 
 def real_settings(tmp_path: Path, **overrides) -> Settings:
@@ -241,24 +242,13 @@ def test_ampere_route_becomes_ready_only_with_exact_cached_weights(
     assert status["available"] is True
 
 
-def test_windows_ampere_selects_ready_cpu_tflite_fallback(
+def test_windows_4090_selects_ready_flash_attention_route(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(
-        "vibeseq_inference.readiness.module_installed",
-        lambda name: name != "flash_attn",
-    )
+    monkeypatch.setattr("vibeseq_inference.readiness.module_installed", lambda _: True)
     monkeypatch.setattr(
         "vibeseq_inference.readiness.cached_files",
-        lambda artifact, *_: (
-            (True, ())
-            if artifact.key == "stable-audio-3-medium-optimized"
-            else (False, artifact.files)
-        ),
-    )
-    monkeypatch.setattr(
-        "vibeseq_inference.readiness.tflite_code_cached",
-        lambda: True,
+        lambda *_: (True, ()),
     )
     status = generation_capability(
         real_settings(tmp_path),
@@ -267,11 +257,124 @@ def test_windows_ampere_selects_ready_cpu_tflite_fallback(
         ),
     )
     assert status["preferredRoute"] == "cuda-ampere-fa2"
-    assert status["routePriority"] == ["cuda-ampere-fa2", "cpu-tflite"]
-    assert status["route"] == "cpu-tflite"
-    assert status["runtime"] == "tflite-w8a8-dyn"
-    assert status["device"] == "cpu"
+    assert status["routePriority"] == ["cuda-ampere-fa2"]
+    assert status["route"] == "cuda-ampere-fa2"
+    assert status["runtime"] == "pytorch-fa2"
+    assert status["device"] == "cuda"
     assert status["ready"] is True
+
+
+def test_windows_4090_blocks_instead_of_silently_falling_back_without_fa2(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.module_installed",
+        lambda name: name != "flash_attn",
+    )
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.cached_files",
+        lambda *_: (True, ()),
+    )
+    status = generation_capability(
+        real_settings(tmp_path),
+        probe=HardwareProbe(
+            "Windows", "AMD64", True, (8, 9), "NVIDIA GeForce RTX 4090", False
+        ),
+    )
+    assert status["routePriority"] == ["cuda-ampere-fa2"]
+    assert status["route"] == "cuda-ampere-fa2"
+    assert status["device"] == "cuda"
+    assert status["missingPackages"] == ["flash_attn"]
+    assert status["ready"] is False
+    assert status["available"] is False
+
+
+def test_windows_4090_blocks_when_bundle_contains_cpu_only_torch(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("vibeseq_inference.readiness.module_installed", lambda _: True)
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.cached_files",
+        lambda *_: (True, ()),
+    )
+    status = generation_capability(
+        real_settings(tmp_path),
+        probe=HardwareProbe(
+            "Windows",
+            "AMD64",
+            False,
+            (8, 9),
+            "NVIDIA GeForce RTX 4090",
+            False,
+            cuda_hardware_detected=True,
+            cuda_runtime=None,
+        ),
+    )
+    assert status["routePriority"] == ["cuda-ampere-fa2"]
+    assert status["route"] == "cuda-ampere-fa2"
+    assert status["runtimeCompatible"] is False
+    assert status["ready"] is False
+    assert "CPU fallback is intentionally disabled" in status["reason"]
+
+
+def test_windows_4090_uses_verified_isolated_cuda_runtime(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project_digest = "a" * 64
+    runtime = (
+        tmp_path
+        / "runtimes"
+        / CUDA_RUNTIME_BUNDLE
+    )
+    python = runtime / "venv" / "Scripts" / "python.exe"
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b"fixture")
+    (runtime / ".vibeseq-runtime.json").write_text(
+        '{"bundleId":"%s","projectDigest":"%s"}'
+        % (CUDA_RUNTIME_BUNDLE, project_digest),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VIBESEQ_HOME", str(tmp_path))
+    monkeypatch.setenv("VIBESEQ_CUDA_RUNTIME_PROJECT_DIGEST", project_digest)
+    monkeypatch.setattr("vibeseq_inference.readiness.module_installed", lambda _: False)
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.cached_files",
+        lambda *_: (True, ()),
+    )
+
+    status = generation_capability(
+        real_settings(tmp_path),
+        probe=HardwareProbe(
+            "Windows",
+            "AMD64",
+            False,
+            (8, 9),
+            "NVIDIA GeForce RTX 4090",
+            False,
+            cuda_hardware_detected=True,
+        ),
+    )
+    assert status["routePriority"] == ["cuda-ampere-fa2"]
+    assert status["runtimeCompatible"] is True
+    assert status["packageInstalled"] is True
+    assert status["missingPackages"] == []
+    assert status["ready"] is True
+
+    monkeypatch.setenv("VIBESEQ_CUDA_RUNTIME_PROJECT_DIGEST", "b" * 64)
+    stale = generation_capability(
+        real_settings(tmp_path),
+        probe=HardwareProbe(
+            "Windows",
+            "AMD64",
+            False,
+            (8, 9),
+            "NVIDIA GeForce RTX 4090",
+            False,
+            cuda_hardware_detected=True,
+        ),
+    )
+    assert stale["runtimeCompatible"] is False
+    assert stale["ready"] is False
 
 
 def test_t4_sdpa_is_provisional_and_disabled_by_default(

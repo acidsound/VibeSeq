@@ -5,6 +5,7 @@ type StableAudioInstallStatus = {
   platformKey: string
   variantLabel?: string
   installed: boolean
+  modelInstalled?: boolean
   installedBytes: number
   totalBytes: number
   minimumFreeBytes?: number
@@ -12,6 +13,8 @@ type StableAudioInstallStatus = {
   modelId?: string
   releaseUrl?: string
   installRoot?: string
+  requiresToken?: boolean
+  runtimeInstalled?: boolean
   terms?: {
     stability: string
     gemma: string
@@ -20,7 +23,7 @@ type StableAudioInstallStatus = {
 }
 
 type StableAudioInstallProgress = {
-  phase: 'downloading' | 'verified' | 'complete'
+  phase: 'runtime' | 'downloading' | 'verified' | 'complete'
   asset: string | null
   downloadedBytes: number
   totalBytes: number
@@ -56,8 +59,12 @@ interface Window {
       ready: () => void
     }
     stableAudio: {
-      status: () => Promise<StableAudioInstallStatus>
-      install: (accepted: boolean) => Promise<StableAudioInstallStatus>
+      status: (modelId?: string) => Promise<StableAudioInstallStatus>
+      install: (request: {
+        accepted: boolean
+        modelId?: string
+        token?: string
+      }) => Promise<StableAudioInstallStatus>
       cancel: () => Promise<{ cancelled: boolean }>
       onProgress: (listener: (progress: StableAudioInstallProgress) => void) => () => void
     }

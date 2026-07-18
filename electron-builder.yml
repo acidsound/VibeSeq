@@ -9,6 +9,7 @@ directories:
 files:
   - desktop/main.cjs
   - desktop/model-installer.cjs
+  - desktop/cuda-runtime-installer.cjs
   - desktop/muscriptor-importer.cjs
   - desktop/muscriptor-model-bundle.json
   - desktop/port-selection.cjs
@@ -18,6 +19,7 @@ files:
   - desktop/startup.css
   - desktop/startup.html
   - desktop/stable-audio-model-bundle.json
+  - desktop/stable-audio-gpu-model-bundle.json
   - desktop/stable-audio-NOTICE.txt
   - desktop/storage-root.cjs
 extraResources:
@@ -29,6 +31,16 @@ extraResources:
     to: server
     filter:
       - "**/*"
+  - from: desktop/cuda-runtime
+    to: cuda-runtime/desktop/cuda-runtime
+    filter:
+      - pyproject.toml
+      - uv.lock
+  - from: server
+    to: cuda-runtime/server
+    filter:
+      - pyproject.toml
+      - "vibeseq_inference/**/*.py"
 mac:
   icon: build/icon.icns
   category: public.app-category.music

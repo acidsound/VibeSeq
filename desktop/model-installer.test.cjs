@@ -16,6 +16,7 @@ const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex'
 const first = Buffer.from('abc')
 const second = Buffer.from('def')
 const complete = Buffer.concat([first, second])
+const gpuConfig = Buffer.from('{"model":"medium"}\n')
 const requests = []
 let server
 let baseUrl
@@ -23,12 +24,18 @@ let baseUrl
 before(async () => {
   server = http.createServer((request, response) => {
     const asset = new URL(request.url, 'http://127.0.0.1').pathname.slice(1)
-    const value = asset === 'part-0' ? first : asset === 'part-1' ? second : null
+    const value = asset === 'part-0'
+      ? first
+      : asset === 'part-1'
+        ? second
+        : asset === 'gpu-config.json'
+          ? gpuConfig
+          : null
     if (!value) {
       response.writeHead(404).end()
       return
     }
-    requests.push({ asset, range: request.headers.range })
+    requests.push({ asset, range: request.headers.range, authorization: request.headers.authorization })
     const offset = request.headers.range ? Number(request.headers.range.match(/^bytes=(\d+)-$/)?.[1]) : 0
     response.writeHead(offset > 0 ? 206 : 200, {
       'Content-Length': value.length - offset,
@@ -71,6 +78,11 @@ const manifest = {
   },
 }
 
+const gitBlobSha1 = (value) => crypto.createHash('sha1')
+  .update(`blob ${value.length}\0`)
+  .update(value)
+  .digest('hex')
+
 test('resumes a platform-specific release asset and installs the exact HF snapshot layout', async () => {
   const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-model-installer-'))
   const installer = new StableAudioModelInstaller({
@@ -112,8 +124,59 @@ test('reports an unsupported OS without downloading another platform model', asy
   await assert.rejects(() => installer.install({ accepted: true }), /not packaged for freebsd-x64/)
 })
 
+test('gated GPU model requires an ephemeral token and verifies Git blob digests', async () => {
+  const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-gpu-model-installer-'))
+  const digest = gitBlobSha1(gpuConfig)
+  const gpuManifest = {
+    schemaVersion: 1,
+    bundleId: 'gpu-test-bundle',
+    modelId: 'stabilityai/stable-audio-3-medium',
+    revision: '27b5a21',
+    release: { repository: 'acidsound/VibeSeq' },
+    terms: manifest.terms,
+    commonFiles: [],
+    variants: {
+      'win32-x64': {
+        label: 'Windows CUDA FA2',
+        source: {
+          kind: 'huggingface',
+          baseUrl,
+          accessUrl: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
+          requiresToken: true,
+        },
+        downloadBytes: gpuConfig.length,
+        minimumFreeBytes: 100,
+        files: [{
+          destination: 'model_config.json',
+          size: gpuConfig.length,
+          gitSha1: digest,
+          parts: [{ asset: 'gpu-config.json', size: gpuConfig.length, gitSha1: digest }],
+        }],
+      },
+    },
+  }
+  const installer = new StableAudioModelInstaller({
+    storageRoot,
+    manifest: gpuManifest,
+    platform: 'win32',
+    arch: 'x64',
+  })
+
+  assert.equal((await installer.status()).requiresToken, true)
+  await assert.rejects(
+    () => installer.install({ accepted: true }),
+    /requires a Hugging Face read token/,
+  )
+  const result = await installer.install({ accepted: true, token: 'ephemeral-test-token' })
+  assert.equal(result.installed, true)
+  const request = requests.find((entry) => entry.asset === 'gpu-config.json')
+  assert.equal(request.authorization, 'Bearer ephemeral-test-token')
+  await assert.doesNotReject(() => installer.install({ accepted: true }))
+})
+
 test('shipping manifest separates all OS releases and selects the expected model formats', () => {
   const shipping = require('./stable-audio-model-bundle.json')
+  const gpuShipping = require('./stable-audio-gpu-model-bundle.json')
   const mac = shipping.variants['darwin-arm64']
   const windows = shipping.variants['win32-x64']
   const linux = shipping.variants['linux-x64']
@@ -129,4 +192,9 @@ test('shipping manifest separates all OS releases and selects the expected model
   assert.ok(mac.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
   assert.ok(windows.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
   assert.ok(linux.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
+  const windowsGpu = gpuShipping.variants['win32-x64']
+  assert.equal(windowsGpu.source.kind, 'huggingface')
+  assert.equal(windowsGpu.source.requiresToken, true)
+  assert.ok(windowsGpu.files.some((file) => file.destination === 'model.safetensors'))
+  assert.ok(windowsGpu.files.every((file) => !file.destination.startsWith('tflite/')))
 })

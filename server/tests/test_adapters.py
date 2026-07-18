@@ -31,6 +31,7 @@ from vibeseq_inference.providers.stable_audio import (
     StableAudio3Provider,
     _pinned_stable_audio_files,
 )
+from vibeseq_inference.stable_audio_cuda import CudaGenerationResult
 from vibeseq_inference.stable_audio_mlx import MlxGenerationResult
 from vibeseq_inference.stable_audio_tflite import TfliteGenerationResult
 
@@ -588,7 +589,7 @@ def test_stable_audio_gpu_failure_falls_back_once_to_exact_medium_cpu(
     assert artifact.model_id == "stabilityai/stable-audio-3-optimized"
 
 
-def test_stable_audio_unavailable_cuda_route_falls_back_to_cpu_tflite(
+def test_stable_audio_cuda_failure_never_silently_falls_back_to_cpu_tflite(
     tmp_path: Path, monkeypatch
 ) -> None:
     routes = (
@@ -636,15 +637,60 @@ def test_stable_audio_unavailable_cuda_route_falls_back_to_cpu_tflite(
     monkeypatch.setattr(
         "vibeseq_inference.providers.stable_audio.run_tflite_generation", run_cpu
     )
+    with pytest.raises(ProviderUnavailable, match="cuda-ampere-fa2"):
+        StableAudio3Provider("medium").generate(
+            GenerateRequest(prompt="no fallback", duration=0.25, bpm=120, seed=13),
+            tmp_path / "no-fallback.wav",
+            lambda _: None,
+            lambda: False,
+        )
+    assert attempts == ["cuda-ampere-fa2"]
+
+
+def test_stable_audio_uses_verified_isolated_cuda_worker(
+    tmp_path: Path, monkeypatch
+) -> None:
+    route = RuntimeRoute(
+        id="cuda-ampere-fa2",
+        runtime="pytorch-fa2",
+        device="cuda",
+        artifact_key="stable-audio-3-medium-pytorch",
+        required_modules=("torch", "stable_audio_3", "flash_attn"),
+        required_files=("model.safetensors",),
+    )
+    monkeypatch.setattr(
+        "vibeseq_inference.providers.stable_audio.stable_audio_execution_routes",
+        lambda *_, **__: (route,),
+    )
+    monkeypatch.setattr(
+        "vibeseq_inference.providers.stable_audio.cuda_runtime_python",
+        lambda: tmp_path / "python.exe",
+    )
+    calls = []
+
+    def run_cuda(**kwargs):
+        calls.append(kwargs["prompt"])
+        write_pcm16_wave(
+            kwargs["output_path"],
+            np.zeros((2, 2_000), dtype=np.float32),
+            8_000,
+        )
+        return CudaGenerationResult(0.5, 0.5, False, 0.0)
+
+    monkeypatch.setattr(
+        "vibeseq_inference.providers.stable_audio.run_cuda_generation",
+        run_cuda,
+    )
     artifact = StableAudio3Provider("medium").generate(
-        GenerateRequest(prompt="fallback", duration=0.25, bpm=120, seed=13),
-        tmp_path / "fallback-cpu.wav",
+        GenerateRequest(prompt="verified worker", duration=0.25, bpm=128, seed=21),
+        tmp_path / "cuda.wav",
         lambda _: None,
         lambda: False,
     )
-    assert attempts == ["cuda-ampere-fa2", "cpu-tflite"]
-    assert artifact.route == "cpu-tflite"
-    assert artifact.device == "cpu"
+    assert calls == ["verified worker, 128 BPM"]
+    assert artifact.route == "cuda-ampere-fa2"
+    assert artifact.device == "cuda"
+    assert artifact.duration == 0.25
 
 
 def test_stable_audio_resolver_pins_checkpoint_and_text_encoder(
@@ -683,7 +729,7 @@ def test_stable_audio_resolver_pins_checkpoint_and_text_encoder(
 
     monkeypatch.setattr("huggingface_hub.hf_hub_download", pinned_download)
     monkeypatch.setattr(
-        "vibeseq_inference.providers.stable_audio.model_config_dir",
+        "vibeseq_inference.stable_audio_config.model_config_dir",
         lambda: tmp_path / "cache" / "model-configs",
     )
     config_path, checkpoint_path = _pinned_stable_audio_files()

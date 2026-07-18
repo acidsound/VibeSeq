@@ -15,7 +15,12 @@ const {
 } = require('./storage-root.cjs')
 const { runDesktopStartup } = require('./startup-flow.cjs')
 const { StableAudioModelInstaller } = require('./model-installer.cjs')
+const {
+  CudaRuntimeInstaller,
+  runtimeProjectDigest,
+} = require('./cuda-runtime-installer.cjs')
 const stableAudioManifest = require('./stable-audio-model-bundle.json')
+const stableAudioGpuManifest = require('./stable-audio-gpu-model-bundle.json')
 const { MuscriptorCacheVerifier } = require('./muscriptor-importer.cjs')
 const muscriptorManifest = require('./muscriptor-model-bundle.json')
 
@@ -46,6 +51,22 @@ const stableAudioInstaller = new StableAudioModelInstaller({
   storageRoot,
   manifest: stableAudioManifest,
 })
+const stableAudioGpuInstaller = new StableAudioModelInstaller({
+  storageRoot,
+  manifest: stableAudioGpuManifest,
+})
+const stableAudioInstallerFor = (modelId) => (
+  modelId === stableAudioGpuManifest.modelId
+    ? stableAudioGpuInstaller
+    : stableAudioInstaller
+)
+const cudaRuntimeProjectRoot = app.isPackaged
+  ? path.join(process.resourcesPath, 'cuda-runtime', 'desktop', 'cuda-runtime')
+  : path.join(__dirname, 'cuda-runtime')
+const cudaRuntimeInstaller = new CudaRuntimeInstaller({
+  storageRoot,
+  projectRoot: cudaRuntimeProjectRoot,
+})
 const muscriptorCacheVerifier = new MuscriptorCacheVerifier({
   storageRoot,
   manifest: muscriptorManifest,
@@ -59,22 +80,64 @@ const updateStartup = (update) => {
 }
 
 ipcMain.handle('desktop:startup-state', () => startupState)
-ipcMain.handle('stable-audio:status', () => stableAudioInstaller.status())
+ipcMain.handle('stable-audio:status', async (_event, request) => {
+  const status = await stableAudioInstallerFor(request?.modelId).status()
+  if (request?.modelId !== stableAudioGpuManifest.modelId) return status
+  const runtime = await cudaRuntimeInstaller.status()
+  return {
+    ...status,
+    modelInstalled: status.installed,
+    requiresToken: status.requiresToken && !status.installed,
+    runtimeInstalled: runtime.installed,
+    installed: status.installed && runtime.installed,
+  }
+})
 ipcMain.handle('stable-audio:install', async (_event, request) => {
   if (request?.accepted !== true) {
     throw new Error('Accept the Stable Audio and Gemma terms before downloading the model.')
   }
   if (modelInstallPromise) return modelInstallPromise
+  const installer = stableAudioInstallerFor(request?.modelId)
   modelInstallController = new AbortController()
-  modelInstallPromise = stableAudioInstaller.install({
-    accepted: true,
-    signal: modelInstallController.signal,
-    onProgress: (progress) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('stable-audio:progress', progress)
+  const sendInstallProgress = (progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('stable-audio:progress', progress)
+    }
+  }
+  modelInstallPromise = (async () => {
+    if (request?.modelId === stableAudioGpuManifest.modelId) {
+      const modelStatus = await installer.status()
+      if (
+        !modelStatus.installed
+        && modelStatus.requiresToken
+        && !String(request?.token || '').trim()
+      ) {
+        throw new Error('Enter a Hugging Face read token before installing the gated GPU model.')
       }
-    },
-  }).finally(() => {
+      await cudaRuntimeInstaller.install({
+        signal: modelInstallController.signal,
+        onProgress: (detail) => sendInstallProgress({
+          phase: 'runtime',
+          asset: detail,
+          downloadedBytes: 0,
+          totalBytes: modelStatus.totalBytes,
+        }),
+      })
+    }
+    const installed = await installer.install({
+      accepted: true,
+      token: request?.token,
+      signal: modelInstallController.signal,
+      onProgress: sendInstallProgress,
+    })
+    if (request?.modelId !== stableAudioGpuManifest.modelId) return installed
+    return {
+      ...installed,
+      modelInstalled: installed.installed,
+      requiresToken: false,
+      runtimeInstalled: true,
+    }
+  })().finally(() => {
     modelInstallController = null
     modelInstallPromise = null
   })
@@ -195,6 +258,8 @@ const launchSidecar = async (onProgress) => {
   const origin = `http://${LOOPBACK_HOST}:${port}`
   const executable = sidecarExecutable()
   const studio = studioDirectory()
+  const cudaProjectDigest = await runtimeProjectDigest(cudaRuntimeProjectRoot)
+  await cudaRuntimeInstaller.status()
 
   if (!fs.existsSync(executable)) throw new Error(`Missing desktop sidecar: ${executable}`)
   if (!fs.existsSync(path.join(studio, 'index.html'))) throw new Error(`Missing Studio build: ${studio}`)
@@ -214,6 +279,7 @@ const launchSidecar = async (onProgress) => {
       VIBESEQ_TARGET: 'local',
       VIBESEQ_GENERATION_PROVIDER: process.env.VIBESEQ_GENERATION_PROVIDER || 'stable-audio-3',
       VIBESEQ_TRANSCRIPTION_PROVIDER: process.env.VIBESEQ_TRANSCRIPTION_PROVIDER || 'muscriptor',
+      VIBESEQ_CUDA_RUNTIME_PROJECT_DIGEST: cudaProjectDigest,
       ...sidecarStorageEnvironment(storageRoot),
     },
     stdio: ['ignore', 'pipe', 'pipe'],

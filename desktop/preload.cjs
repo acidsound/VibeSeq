@@ -13,8 +13,12 @@ contextBridge.exposeInMainWorld('vibeseqDesktop', {
     ready: () => ipcRenderer.send('desktop:studio-ready'),
   },
   stableAudio: {
-    status: () => ipcRenderer.invoke('stable-audio:status'),
-    install: (accepted) => ipcRenderer.invoke('stable-audio:install', { accepted: accepted === true }),
+    status: (modelId) => ipcRenderer.invoke('stable-audio:status', { modelId }),
+    install: ({ accepted, modelId, token }) => ipcRenderer.invoke('stable-audio:install', {
+      accepted: accepted === true,
+      modelId,
+      token,
+    }),
     cancel: () => ipcRenderer.invoke('stable-audio:cancel'),
     onProgress: (listener) => {
       const handler = (_event, progress) => listener(progress)

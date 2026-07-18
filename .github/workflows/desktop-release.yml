@@ -47,6 +47,24 @@ jobs:
           cache-dependency-glob: |
             server/uv.lock
             server/desktop-linux-requirements.txt
+            desktop/cuda-runtime/uv.lock
+      - if: runner.os == 'Windows'
+        name: Sync the locked isolated Windows CUDA runtime
+        shell: pwsh
+        run: |
+          uv sync --project desktop/cuda-runtime --locked --python 3.12.10
+          uv pip install --python desktop/cuda-runtime/.venv/Scripts/python.exe --no-deps --no-build-isolation --reinstall server
+      - if: runner.os == 'Windows'
+        name: Verify pinned CUDA and FlashAttention imports
+        run: >-
+          uv run --project desktop/cuda-runtime --locked --no-sync python -c
+          "import torch, flash_attn, sentencepiece; from flash_attn import flash_attn_func, flash_attn_kvpacked_func;
+          from stable_audio_3 import StableAudioModel;
+          from vibeseq_inference.stable_audio_cuda_worker import main as worker_main;
+          assert torch.__version__ == '2.7.1+cu126'; assert torch.version.cuda == '12.6';
+          assert flash_attn.__version__.startswith('2.8.3'); assert callable(flash_attn_func);
+          assert callable(flash_attn_kvpacked_func); assert callable(StableAudioModel.from_pretrained);
+          assert callable(worker_main)"
       - run: npm ci
       - run: npm run check
       - run: npm run ${{ matrix.package_script }}
@@ -122,16 +140,17 @@ jobs:
 
           This unsigned prerelease is for clean-machine validation of the VibeSeq desktop runtime, local persistence, arrangement editing, playback, and export.
 
-          It embeds the Studio, Stable Audio 3 execution source, frozen real-model runtime, and the verified first-run model installer, so Node.js, Python, and `uv` are not required. Model weights are not included in the executable.
+          It embeds the Studio, Stable Audio 3 execution source, a frozen portable CPU runtime, and verified first-run installers, so Node.js, Python, and `uv` do not need to be preinstalled. Model weights and the optional Windows CUDA runtime are not included in the executable.
 
           On every launch VibeSeq checks the current platform's exact Stable Audio files. If `VibeSeq Data` is absent, empty, incomplete, or missing a required file, the Inference readiness panel offers a resumable SHA-256-verified download after the model terms are accepted:
 
           - macOS ARM64 MLX bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-macos-arm64
-          - Windows x64 TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-windows-x64
+          - Windows x64 CPU TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-windows-x64
+          - Windows NVIDIA Ampere-or-newer: the app installs an isolated managed Python 3.12 runtime, official PyTorch 2.7.1 CUDA 12.6 wheels, and the digest-pinned community FlashAttention 2.8.3 wheel, runs an actual FlashAttention kernel on the detected GPU, then downloads the gated exact Stable Audio 3 Medium checkpoint from Hugging Face with the user's ephemeral read token. The token is never saved.
           - Linux x64 TFLite bundle: https://github.com/acidsound/VibeSeq/releases/tag/stable-audio-3-c2949a-linux-x64
           - MuScriptor Medium: https://huggingface.co/MuScriptor/muscriptor-medium
 
-          Only the Stable Audio model format for the running OS is downloaded. macOS and Linux store it below `~/VibeSeq Data/models`; Windows stores it below `VibeSeq Data/models` beside the installed `VibeSeq.exe`.
+          Only the Stable Audio model format selected for the running hardware is downloaded. FlashAttention-compatible NVIDIA hardware must use the CUDA route and never silently downgrades to CPU. CPU-only Windows continues to use the public TFLite route. macOS and Linux store models below `~/VibeSeq Data/models`; Windows stores models and its optional runtime below `VibeSeq Data` beside the installed `VibeSeq.exe`.
 
           MuScriptor remains gated and is not redistributed. Each user accepts its Hugging Face conditions, downloads the pinned `config.json` and `model.safetensors` in their browser, and places them directly under **SAVE CACHE UNDER**. That exact revision folder opens in Finder, File Explorer, or the Linux file manager. VibeSeq does not download, select, or move these files or request or store a Hugging Face token; **Verify files in cache** only validates the files already in that folder.
 

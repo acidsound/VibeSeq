@@ -725,6 +725,8 @@ svg { display: block; }
 .engine-gated-installer { display: grid; gap: 8px; padding-top: 7px; border-top: 1px solid rgb(93 214 209 / 0.14); }
 .engine-gated-installer ol { display: grid; gap: 6px; margin: 0; padding-left: 17px; color: var(--text-dim); font-size: 7px; line-height: 1.45; }
 .engine-gated-installer a { color: var(--midi); text-decoration: underline; text-underline-offset: 2px; }
+.engine-token-field { display: grid; gap: 4px; color: var(--text-dim); font-size: 7px; }
+.engine-token-field input { min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-dark); color: var(--text); font: 9px var(--font-mono); }
 .engine-gated-installer > button { min-height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border-radius: var(--radius-sm); font-size: 8px; }
 .engine-gated-installer > button svg { width: 12px; }
 .engine-gated-installer > button:disabled { opacity: .5; cursor: wait; }

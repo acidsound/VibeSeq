@@ -45,8 +45,10 @@ const statSize = async (filename) => {
   }
 }
 
-const sha256File = async (filename, { start, end } = {}) => {
-  const hash = crypto.createHash('sha256')
+const digestFile = async (filename, descriptor, { start, end } = {}) => {
+  const algorithm = descriptor.gitSha1 ? 'sha1' : 'sha256'
+  const hash = crypto.createHash(algorithm)
+  if (descriptor.gitSha1) hash.update(`blob ${descriptor.size}\0`)
   const stream = fs.createReadStream(filename, {
     ...(start === undefined ? {} : { start }),
     ...(end === undefined ? {} : { end }),
@@ -56,7 +58,8 @@ const sha256File = async (filename, { start, end } = {}) => {
 }
 
 const exactFile = async (filename, file) => (
-  await statSize(filename) === file.size && await sha256File(filename) === file.sha256
+  await statSize(filename) === file.size
+  && await digestFile(filename, file) === (file.sha256 || file.gitSha1)
 )
 
 const availableBytes = async (root) => {
@@ -72,13 +75,21 @@ const validateVariant = (manifest, variant) => {
   for (const file of files) {
     const partTotal = file.parts.reduce((sum, part) => sum + part.size, 0)
     if (partTotal !== file.size) throw new Error(`Invalid model part total for ${file.destination}.`)
-    if (!/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error(`Invalid model digest for ${file.destination}.`)
+    if (!/^[a-f0-9]{64}$/.test(file.sha256 || '') && !/^[a-f0-9]{40}$/.test(file.gitSha1 || '')) {
+      throw new Error(`Invalid model digest for ${file.destination}.`)
+    }
     for (const part of file.parts) {
-      if (part.size >= 2 * 1024 * 1024 * 1024) throw new Error(`Release asset exceeds 2 GiB: ${part.asset}.`)
-      if (!/^[a-f0-9]{64}$/.test(part.sha256)) throw new Error(`Invalid asset digest for ${part.asset}.`)
+      if (variant.source?.kind !== 'huggingface' && part.size >= 2 * 1024 * 1024 * 1024) {
+        throw new Error(`Release asset exceeds 2 GiB: ${part.asset}.`)
+      }
+      if (!/^[a-f0-9]{64}$/.test(part.sha256 || '') && !/^[a-f0-9]{40}$/.test(part.gitSha1 || '')) {
+        throw new Error(`Invalid asset digest for ${part.asset}.`)
+      }
     }
   }
 }
+
+const encodedAssetPath = (asset) => asset.split('/').map(encodeURIComponent).join('/')
 
 class StableAudioModelInstaller {
   constructor({
@@ -94,7 +105,12 @@ class StableAudioModelInstaller {
     this.key = platformKey(platform, arch)
     this.variant = manifest.variants[this.key] || null
     this.fetch = fetchImpl
-    this.releaseBaseUrl = (releaseBaseUrl || this.variant?.release.baseUrl || '').replace(/\/$/, '')
+    this.releaseBaseUrl = (
+      releaseBaseUrl
+      || this.variant?.source?.baseUrl
+      || this.variant?.release?.baseUrl
+      || ''
+    ).replace(/\/$/, '')
     if (this.variant) validateVariant(manifest, this.variant)
   }
 
@@ -134,21 +150,35 @@ class StableAudioModelInstaller {
       minimumFreeBytes: this.variant.minimumFreeBytes,
       revision: this.manifest.revision,
       modelId: this.manifest.modelId,
-      releaseUrl: `https://github.com/${this.manifest.release.repository}/releases/tag/${this.variant.release.tag}`,
+      releaseUrl: this.variant.source?.accessUrl || (
+        `https://github.com/${this.manifest.release.repository}/releases/tag/${this.variant.release.tag}`
+      ),
+      requiresToken: this.variant.source?.requiresToken === true,
       terms: this.manifest.terms,
       installRoot: root,
     }
   }
 
-  async install({ accepted, signal, onProgress = () => {} }) {
+  async install({ accepted, token, signal, onProgress = () => {} }) {
     if (!this.variant) throw new Error(`Stable Audio is not packaged for ${this.key}.`)
     if (accepted !== true) throw new Error('The Stable Audio and Gemma terms must be accepted before installation.')
-    if (typeof this.fetch !== 'function') throw new Error('This runtime cannot download model assets.')
 
     const root = snapshotDirectory(this.storageRoot, this.manifest)
     const files = variantFiles(this.manifest, this.variant)
     await fsp.mkdir(root, { recursive: true })
     const before = await this.status()
+    if (
+      !before.installed
+      && this.variant.source?.requiresToken === true
+      && !String(token || '').trim()
+    ) {
+      throw new Error(
+        'This GPU model requires a Hugging Face read token after accepting the model access conditions.',
+      )
+    }
+    if (!before.installed && typeof this.fetch !== 'function') {
+      throw new Error('This runtime cannot download model assets.')
+    }
     const remainingBytes = Math.max(0, this.variant.downloadBytes - before.installedBytes)
     const safetyBytes = Math.max(0, this.variant.minimumFreeBytes - this.variant.downloadBytes)
     const requiredBytes = remainingBytes + safetyBytes
@@ -181,7 +211,12 @@ class StableAudioModelInstaller {
         emit('verified', file.destination, 0, true)
         continue
       }
-      await this.#downloadFile(file, target, signal, (fileBytes, asset) => {
+      if (this.variant.source?.requiresToken === true && !String(token || '').trim()) {
+        throw new Error(
+          'This GPU model requires a Hugging Face read token to repair an incomplete or invalid cached file.',
+        )
+      }
+      await this.#downloadFile(file, target, signal, token, (fileBytes, asset) => {
         emit('downloading', asset, fileBytes)
       })
       completedBytes += file.size
@@ -205,7 +240,7 @@ class StableAudioModelInstaller {
     return this.status()
   }
 
-  async #downloadFile(file, target, signal, onBytes) {
+  async #downloadFile(file, target, signal, token, onBytes) {
     const partial = `${target}.vibeseq-download`
     let currentSize = Math.min(await statSize(partial), file.size)
     if (await statSize(partial) > file.size) {
@@ -217,8 +252,8 @@ class StableAudioModelInstaller {
     for (const part of file.parts) {
       const partEnd = partBase + part.size
       if (currentSize >= partEnd) {
-        const digest = await sha256File(partial, { start: partBase, end: partEnd - 1 })
-        if (digest !== part.sha256) {
+        const digest = await digestFile(partial, part, { start: partBase, end: partEnd - 1 })
+        if (digest !== (part.sha256 || part.gitSha1)) {
           await fsp.truncate(partial, partBase)
           currentSize = partBase
         } else {
@@ -232,13 +267,23 @@ class StableAudioModelInstaller {
       // A repository that has just changed from private to public can retain a
       // negative edge-cache entry for the bare release URL. The immutable
       // bundle id makes this URL cache-safe without weakening revision pins.
-      const url = `${this.releaseBaseUrl}/${encodeURIComponent(part.asset)}?bundle=${encodeURIComponent(this.manifest.bundleId)}`
+      const url = `${this.releaseBaseUrl}/${encodedAssetPath(part.asset)}?bundle=${encodeURIComponent(this.manifest.bundleId)}`
       const response = await this.fetch(url, {
-        headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
+        headers: {
+          ...(offset > 0 ? { Range: `bytes=${offset}-` } : {}),
+          ...(this.variant.source?.requiresToken === true
+            ? { Authorization: `Bearer ${String(token).trim()}` }
+            : {}),
+        },
         redirect: 'follow',
         signal,
       })
       if (!response.ok || !response.body) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(
+            'Hugging Face denied the GPU model download. Accept the model access conditions and use a read token from the same account.',
+          )
+        }
         throw new Error(`Could not download ${part.asset}: HTTP ${response.status}`)
       }
 
@@ -268,17 +313,20 @@ class StableAudioModelInstaller {
       if (currentSize !== partEnd) {
         throw new Error(`Downloaded size mismatch for ${part.asset}.`)
       }
-      const digest = await sha256File(partial, { start: partBase, end: partEnd - 1 })
-      if (digest !== part.sha256) {
+      const digest = await digestFile(partial, part, { start: partBase, end: partEnd - 1 })
+      if (digest !== (part.sha256 || part.gitSha1)) {
         await fsp.truncate(partial, partBase)
-        throw new Error(`SHA-256 mismatch for ${part.asset}.`)
+        throw new Error(`Digest mismatch for ${part.asset}.`)
       }
       partBase = partEnd
     }
 
-    if (await statSize(partial) !== file.size || await sha256File(partial) !== file.sha256) {
+    if (
+      await statSize(partial) !== file.size
+      || await digestFile(partial, file) !== (file.sha256 || file.gitSha1)
+    ) {
       await fsp.truncate(partial, 0)
-      throw new Error(`Final SHA-256 mismatch for ${file.destination}.`)
+      throw new Error(`Final digest mismatch for ${file.destination}.`)
     }
     try {
       await fsp.unlink(target)

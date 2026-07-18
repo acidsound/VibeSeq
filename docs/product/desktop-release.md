@@ -14,8 +14,11 @@ GitHub prerelease containing:
 - `SHA256SUMS.txt`: release-asset checksums.
 
 The builds embed the production Studio bundle and a frozen Python inference
-sidecar. Node.js, Python, `uv`, and a separate web server are not required on the
-target machine. The Electron renderer has no Node integration, uses context
+sidecar. Node.js, Python, `uv`, and a separate web server do not need to be
+preinstalled on the target machine. On supported Windows NVIDIA hardware, the
+app downloads its own digest-pinned `uv` executable and managed Python into
+`VibeSeq Data/runtimes`; it never installs into or modifies a system Python.
+The Electron renderer has no Node integration, uses context
 isolation and the Chromium sandbox, and can navigate only within its randomly
 allocated loopback origin.
 
@@ -44,7 +47,7 @@ Stable Audio execution source. It defaults to Stable Audio 3 Medium and
 MuScriptor Medium; demo providers are never substituted silently.
 
 Desktop packages never embed model weights. On every launch, VibeSeq checks the
-exact Stable Audio files required by the current operating system. If
+exact Stable Audio files required by the current hardware route. If
 `VibeSeq Data` is new, empty, partially downloaded, or missing any required
 file, the Inference readiness panel opens the built-in installer. Interrupted
 assets resume with HTTP Range requests; every release part and final model file
@@ -57,20 +60,37 @@ an unusable runtime format:
   approximately 5.18 GB.
 - `stable-audio-3-c2949a-windows-x64`: TFLite Medium weights for Windows CPU,
   approximately 2.58 GB.
+- `stabilityai/stable-audio-3-medium@27b5a21`: gated PyTorch Medium weights for
+  supported Windows NVIDIA GPUs, approximately 10.44 GB.
 
-The Windows release provisions this TFLite CPU format even when an NVIDIA GPU
-is present. If a separately cached CUDA/FlashAttention route is unavailable,
-generation falls back to the verified TFLite route; a CPU-only Windows host
-selects that route directly. Neither case substitutes a smaller model.
+CPU-only Windows selects the public TFLite route directly. When VibeSeq detects
+an Ampere-or-newer NVIDIA GPU, it instead requires the CUDA/FlashAttention 2
+route and does not silently fall back to CPU. The installer provisions an
+isolated managed Python 3.12 environment, official PyTorch 2.7.1 CUDA 12.6
+wheels, and the community Windows FlashAttention 2.8.3 wheel pinned by URL and
+SHA-256 in `desktop/cuda-runtime/uv.lock`. The runtime is activated only after
+an actual FlashAttention kernel succeeds on the detected GPU. Neither route
+substitutes a smaller model.
 
-Both are fixed GitHub Releases rather than `latest` aliases. The app bundles an
-immutable manifest containing the release asset names, sizes, and digests. The
-user must accept the Stability AI Community License and Gemma Terms before the
+The GPU checkpoint remains gated. The user accepts access on Hugging Face and
+pastes a read token for that download; VibeSeq sends it only to Hugging Face and
+does not save it to disk or logs. The installed environment contains a copied
+VibeSeq inference package rather than an editable link to the application
+folder. Its project digest is rechecked after an app update, and its virtual
+environment paths are repaired when the installation and adjacent
+`VibeSeq Data` directory are moved together.
+
+The public MLX and TFLite bundles are fixed GitHub Releases rather than `latest`
+aliases; the gated PyTorch files come from an exact Hugging Face commit. The app
+bundles immutable manifests containing file names, sizes, and digests. The user
+must accept the Stability AI Community License and Gemma Terms before the
 download starts; copies of both terms and the required notice are installed
 beside the model snapshot.
 
 - Stable Audio 3 Medium optimized:
   <https://huggingface.co/stabilityai/stable-audio-3-optimized>
+- Stable Audio 3 Medium PyTorch:
+  <https://huggingface.co/stabilityai/stable-audio-3-medium>
 - MuScriptor Medium:
   <https://huggingface.co/MuScriptor/muscriptor-medium>
 
@@ -135,15 +155,18 @@ On a clean Windows 11 x64 machine:
    advances through Local data, Audio engine, Health check, and Studio.
 5. Create a project, add independent Audio and MIDI tracks, edit and play both,
    save, close, and reopen the app.
-6. Start with an absent or empty `VibeSeq Data`, accept the displayed model
-   terms, let the built-in installer download only the Windows TFLite Release,
-   then generate with Stable Audio 3 Medium and extract
-   with MuScriptor Medium, and confirm both provenance records and runtime
-   routes match the health response.
-7. Export a `.vibeseq` project, full mix, MIDI, one track, and the all-track ZIP;
+6. On CPU-only Windows, start with an absent or empty `VibeSeq Data`, accept the
+   displayed model terms, install the Windows TFLite files, and confirm the
+   `cpu-tflite` route generates with Stable Audio 3 Medium.
+7. On Ampere-or-newer NVIDIA Windows, accept gated model access, provide a
+   read-only Hugging Face token, and confirm the installer reports the managed
+   CUDA runtime, FlashAttention kernel check, and exact PyTorch model download.
+   Confirm health and generation both report `cuda-ampere-fa2`, never
+   `cpu-tflite`.
+8. Export a `.vibeseq` project, full mix, MIDI, one track, and the all-track ZIP;
    reopen the project and validate the exported files.
-8. Switch away from and back to VibeSeq during playback, then repeat mute, solo,
+9. Switch away from and back to VibeSeq during playback, then repeat mute, solo,
    gain, piano-key audition, and note-selection edits.
-9. Retain the exact release asset name, checksum, Windows version, hardware,
+10. Retain the exact release asset name, checksum, Windows version, hardware,
    screen recording, exported fixtures, and the desktop log from the Electron
    logs directory.

@@ -82,6 +82,30 @@ const blockedMuscriptorHealth = (): InferenceHealth => {
   return health
 }
 
+const blockedWindowsGpuHealth = (): InferenceHealth => {
+  const health = blockedHealth()
+  health.hardware = { preferredDevice: 'cuda', devices: ['cuda', 'cpu'] }
+  health.generation = {
+    ...health.generation,
+    modelId: 'stabilityai/stable-audio-3-medium',
+    modelRevision: '27b5a21b791b1b033d193a9e1e3ce78493f102f9',
+    device: 'cuda',
+    runtime: 'pytorch-fa2',
+    route: 'cuda-ampere-fa2',
+    weightsCached: false,
+    accessGranted: null,
+    missingFiles: ['model.safetensors'],
+    bootstrap: {
+      modelId: 'stabilityai/stable-audio-3-medium',
+      revision: '27b5a21b791b1b033d193a9e1e3ce78493f102f9',
+      files: ['model.safetensors'],
+      accessUrl: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
+      requiresApproval: true,
+    },
+  }
+  return health
+}
+
 describe('EngineDialog model installation guidance', () => {
   it('shows the official source, exact file, and effective model-cache path', () => {
     render(createElement(EngineDialog, {
@@ -157,9 +181,131 @@ describe('EngineDialog model installation guidance', () => {
     expect(download.hasAttribute('disabled')).toBe(false)
     fireEvent.click(download)
 
-    await waitFor(() => expect(install).toHaveBeenCalledWith(true))
+    await waitFor(() => expect(install).toHaveBeenCalledWith({
+      accepted: true,
+      modelId: 'stabilityai/stable-audio-3-optimized',
+      token: undefined,
+    }))
     await waitFor(() => expect(onModelInstalled).toHaveBeenCalledOnce())
     expect(screen.getByText('Apple Silicon · MLX')).not.toBeNull()
+  })
+
+  it('requires a same-account Hugging Face token for the Windows FA2 model', async () => {
+    const install = vi.fn().mockResolvedValue({
+      supported: true,
+      platformKey: 'win32-x64',
+      variantLabel: 'Windows x64 · NVIDIA CUDA · FlashAttention 2',
+      installed: true,
+      installedBytes: 10_443_825_499,
+      totalBytes: 10_443_825_499,
+      revision: '27b5a21b791b1b033d193a9e1e3ce78493f102f9',
+      modelInstalled: true,
+      requiresToken: false,
+    })
+    window.vibeseqDesktop = {
+      stableAudio: {
+        status: vi.fn().mockResolvedValue({
+          supported: true,
+          platformKey: 'win32-x64',
+          variantLabel: 'Windows x64 · NVIDIA CUDA · FlashAttention 2',
+          installed: false,
+          installedBytes: 0,
+          totalBytes: 10_443_825_499,
+          revision: '27b5a21b791b1b033d193a9e1e3ce78493f102f9',
+          requiresToken: true,
+          releaseUrl: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
+          terms: {
+            stability: 'https://huggingface.co/stabilityai/stable-audio-3-medium/blob/revision/LICENSE.md',
+            gemma: 'https://ai.google.dev/gemma/terms',
+            source: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
+          },
+        }),
+        install,
+        cancel: vi.fn().mockResolvedValue({ cancelled: true }),
+        onProgress: vi.fn(() => () => undefined),
+      },
+      muscriptor: { verifyCache: vi.fn(), openCacheFolder: vi.fn() },
+      modelCache: { open: vi.fn() },
+      openExternal: vi.fn(),
+    }
+
+    render(createElement(EngineDialog, {
+      health: blockedWindowsGpuHealth(),
+      generationProvider: 'stable-audio-3',
+      transcriptionProvider: 'muscriptor',
+      onGenerationProvider: vi.fn(),
+      onTranscriptionProvider: vi.fn(),
+      onClose: vi.fn(),
+    }))
+
+    const download = await screen.findByRole('button', { name: /Download & install 10.44 GB/ })
+    fireEvent.click(screen.getByRole('checkbox'))
+    expect(download.hasAttribute('disabled')).toBe(true)
+    fireEvent.change(screen.getByLabelText('Hugging Face read token'), {
+      target: { value: 'hf_ephemeral' },
+    })
+    expect(download.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(download)
+
+    await waitFor(() => expect(install).toHaveBeenCalledWith({
+      accepted: true,
+      modelId: 'stabilityai/stable-audio-3-medium',
+      token: 'hf_ephemeral',
+    }))
+  })
+
+  it('offers CUDA runtime repair when GPU weights are already cached', async () => {
+    const health = blockedWindowsGpuHealth()
+    health.generation = {
+      ...health.generation,
+      weightsCached: true,
+      packageInstalled: false,
+      runtimeCompatible: false,
+      missingFiles: [],
+    }
+    const status = vi.fn().mockResolvedValue({
+      supported: true,
+      platformKey: 'win32-x64',
+      variantLabel: 'Windows x64 · NVIDIA CUDA · FlashAttention 2',
+      installed: false,
+      modelInstalled: true,
+      installedBytes: 10_443_825_499,
+      totalBytes: 10_443_825_499,
+      revision: '27b5a21b791b1b033d193a9e1e3ce78493f102f9',
+      requiresToken: false,
+      releaseUrl: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
+      terms: {
+        stability: 'https://huggingface.co/stabilityai/stable-audio-3-medium/blob/revision/LICENSE.md',
+        gemma: 'https://ai.google.dev/gemma/terms',
+        source: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
+      },
+    })
+    window.vibeseqDesktop = {
+      stableAudio: {
+        status,
+        install: vi.fn(),
+        cancel: vi.fn(),
+        onProgress: vi.fn(() => () => undefined),
+      },
+      muscriptor: { verifyCache: vi.fn(), openCacheFolder: vi.fn() },
+      modelCache: { open: vi.fn() },
+      openExternal: vi.fn(),
+    }
+
+    render(createElement(EngineDialog, {
+      health,
+      generationProvider: 'stable-audio-3',
+      transcriptionProvider: 'muscriptor',
+      onGenerationProvider: vi.fn(),
+      onTranscriptionProvider: vi.fn(),
+      onClose: vi.fn(),
+    }))
+
+    const download = await screen.findByRole('button', { name: /Download & install 10.44 GB/ })
+    fireEvent.click(screen.getByRole('checkbox'))
+    expect(download.hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByText('Hugging Face read token')).toBeNull()
+    expect(status).toHaveBeenCalledWith('stabilityai/stable-audio-3-medium')
   })
 
   it('guides gated MuScriptor access and verifies both browser-downloaded files', async () => {
