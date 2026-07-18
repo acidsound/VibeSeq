@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import queue
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -63,6 +65,24 @@ def request(output_path: Path) -> dict[str, object]:
         "seed": 17,
         "outputPath": str(output_path),
     }
+
+
+def test_stable_cuda_service_import_does_not_require_muscriptor_dependencies() -> None:
+    probe = """
+import builtins
+
+real_import = builtins.__import__
+
+def stable_only_import(name, *args, **kwargs):
+    if name.split('.', 1)[0] in {'muscriptor', 'pydantic'}:
+        raise ModuleNotFoundError(name)
+    return real_import(name, *args, **kwargs)
+
+builtins.__import__ = stable_only_import
+from vibeseq_inference.cuda_service import CudaModelManager
+assert callable(CudaModelManager.generate)
+"""
+    subprocess.run([sys.executable, "-c", probe], check=True)
 
 
 def test_repeated_stable_generations_reuse_one_loaded_model(tmp_path: Path) -> None:

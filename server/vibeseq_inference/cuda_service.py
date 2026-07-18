@@ -11,11 +11,6 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from .muscriptor_cuda_worker import (
-    load_muscriptor_model,
-    muscriptor_weights_cached,
-    transcribe_with_model,
-)
 from .security import safe_error_message
 from .stable_audio_cuda_worker import generate_with_model, load_stable_audio_model
 
@@ -23,6 +18,29 @@ from .stable_audio_cuda_worker import generate_with_model, load_stable_audio_mod
 GIB = 1024**3
 MUSCRIPTOR_GPU_MIN_FREE_BYTES = 8 * GIB
 FAST_STABLE_DECODE_MIN_FREE_BYTES = 8 * GIB
+
+
+def _load_muscriptor_model(*, device: str, progress):
+    from .muscriptor_cuda_worker import load_muscriptor_model
+
+    return load_muscriptor_model(device=device, progress=progress)
+
+
+def _muscriptor_weights_cached() -> bool:
+    try:
+        from .muscriptor_cuda_worker import muscriptor_weights_cached
+    except ModuleNotFoundError:
+        # Stable Audio is a complete profile on its own. The background preload
+        # probe must remain a no-op until the optional MuScriptor profile and
+        # its Python dependencies have been installed and verified.
+        return False
+    return muscriptor_weights_cached()
+
+
+def _transcribe_with_model(model, **kwargs):
+    from .muscriptor_cuda_worker import transcribe_with_model
+
+    return transcribe_with_model(model, **kwargs)
 
 
 def _wait_for_windows_parent(parent_pid: int) -> None:
@@ -78,9 +96,9 @@ class CudaModelManager:
         torch_module=None,
         stable_loader=load_stable_audio_model,
         stable_generator=generate_with_model,
-        muscriptor_loader=load_muscriptor_model,
-        muscriptor_transcriber=transcribe_with_model,
-        muscriptor_cache_check=muscriptor_weights_cached,
+        muscriptor_loader=_load_muscriptor_model,
+        muscriptor_transcriber=_transcribe_with_model,
+        muscriptor_cache_check=_muscriptor_weights_cached,
     ) -> None:
         self._torch = torch_module
         self._stable_loader = stable_loader
