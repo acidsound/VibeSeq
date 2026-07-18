@@ -21,7 +21,10 @@ def run_cuda_transcription(
     progress,
     cancelled,
 ) -> CudaTranscriptionResult:
-    python = cuda_runtime_python(require_flash_attention=False)
+    python = cuda_runtime_python(
+        require_flash_attention=False,
+        require_muscriptor=True,
+    )
     if python is None:
         raise RuntimeError("The managed VibeSeq CUDA runtime is not verified.")
     input_path = input_path.resolve()

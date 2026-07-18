@@ -58,6 +58,7 @@ test('installs the pinned CUDA runtime under VibeSeq Data and invalidates change
   assert.deepEqual(commands[0].args, ['cache', 'clean', 'flash-attn'])
   assert.deepEqual(commands[1].args, [
     'sync', '--project', projectRoot, '--locked', '--python', '3.12.10',
+    '--extra', 'stable-audio', '--inexact',
     '--refresh-package', 'flash-attn', '--reinstall-package', 'flash-attn',
   ])
   assert.equal(commands[1].env.UV_PROJECT_ENVIRONMENT, runtimePaths(storageRoot).environment)
@@ -66,11 +67,14 @@ test('installs the pinned CUDA runtime under VibeSeq Data and invalidates change
   ])
   assert.ok(commands[2].args.includes('--no-build-isolation'))
   assert.ok(commands[2].args.includes('--reinstall'))
-  assert.match(commands[3].args[1], /TranscriptionModel/)
+  assert.doesNotMatch(commands[3].args[1], /TranscriptionModel/)
+  assert.doesNotMatch(commands[3].args[1], /import muscriptor/)
   assert.match(commands[3].args[1], /CudaModelManager/)
-  assert.match(commands[3].args[1], /muscriptor_cuda_worker/)
+  assert.match(commands[3].args[1], /StableAudioModel/)
   assert.match(commands[3].args[1], /flash_attn_func/)
   assert.match(commands[3].args[1], /torch\.cuda\.synchronize/)
+  assert.equal(installed.flashAttentionInstalled, true)
+  assert.equal(installed.muscriptorInstalled, false)
 
   await fs.writeFile(path.join(packageRoot, '__init__.py'), 'VERSION = 2\n')
   assert.equal((await installer.status()).installed, false)
@@ -96,6 +100,7 @@ test('repairs the isolated environment when the whole installation is moved', as
     storageRoot: oldStorage,
     cudaVerified: true,
     flashAttentionVerified: true,
+    muscriptorVerified: true,
   })}\n`)
   await fs.mkdir(path.dirname(newStorage), { recursive: true })
   await fs.rename(oldStorage, newStorage)
@@ -107,6 +112,7 @@ test('repairs the isolated environment when the whole installation is moved', as
     arch: 'x64',
   })
   assert.equal((await installer.status()).installed, true)
+  assert.equal((await installer.status()).muscriptorInstalled, true)
   assert.match(await fs.readFile(runtimePaths(newStorage).configuration, 'utf8'), new RegExp(newStorage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   assert.equal(JSON.parse(await fs.readFile(runtimePaths(newStorage).marker)).storageRoot, path.resolve(newStorage))
 })
@@ -166,7 +172,7 @@ test('repairs an incomplete FlashAttention metadata cache with a no-cache retry'
   assert.equal(commands[2].args.includes('--no-cache'), true)
 })
 
-test('MuScriptor verifies CUDA without requiring a FlashAttention-capable GPU', async () => {
+test('MuScriptor installs and verifies independently from Stable Audio and FlashAttention', async () => {
   const resourceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-muscriptor-cuda-resource-'))
   const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-muscriptor-cuda-storage-'))
   const { projectRoot } = await fixtureProject(resourceRoot)
@@ -191,13 +197,55 @@ test('MuScriptor verifies CUDA without requiring a FlashAttention-capable GPU', 
     runImpl,
   })
 
-  const installed = await installer.install({ requireFlashAttention: false })
+  const installed = await installer.install({ profile: 'muscriptor' })
 
   assert.equal(installed.installed, true)
   assert.equal(installed.flashAttentionInstalled, false)
-  assert.match(commands[3].args[1], /TranscriptionModel/)
-  assert.doesNotMatch(commands[3].args[1], /flash_attn_func/)
+  assert.equal(installed.muscriptorInstalled, true)
+  assert.deepEqual(commands[0].args, [
+    'sync', '--project', projectRoot, '--locked', '--python', '3.12.10',
+    '--extra', 'muscriptor', '--inexact',
+    '--refresh-package', 'muscriptor', '--reinstall-package', 'muscriptor',
+  ])
+  assert.match(commands[2].args[1], /TranscriptionModel/)
+  assert.doesNotMatch(commands[2].args[1], /flash_attn_func/)
+  assert.doesNotMatch(commands[2].args[1], /StableAudioModel/)
   const marker = JSON.parse(await fs.readFile(paths.marker, 'utf8'))
   assert.equal(marker.cudaVerified, true)
   assert.equal(marker.flashAttentionVerified, false)
+  assert.equal(marker.muscriptorVerified, true)
+})
+
+test('installing the second CUDA profile preserves the first profile verification', async () => {
+  const resourceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-profile-resource-'))
+  const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-profile-storage-'))
+  const { projectRoot } = await fixtureProject(resourceRoot)
+  const paths = runtimePaths(storageRoot)
+  await fs.mkdir(path.dirname(paths.uv), { recursive: true })
+  await fs.writeFile(paths.uv, 'fixture executable')
+  const runImpl = async (options) => {
+    if (options.args[0] === 'sync') {
+      await fs.mkdir(path.dirname(paths.python), { recursive: true })
+      await fs.writeFile(paths.python, 'fixture python')
+      await fs.writeFile(paths.configuration, 'home = fixture\n')
+    }
+    return ''
+  }
+  const installer = new CudaRuntimeInstaller({
+    storageRoot,
+    projectRoot,
+    platform: 'win32',
+    arch: 'x64',
+    runImpl,
+  })
+
+  await installer.install({ profile: 'muscriptor' })
+  const installed = await installer.install({ profile: 'stable-audio' })
+
+  assert.equal(installed.installed, true)
+  assert.equal(installed.flashAttentionInstalled, true)
+  assert.equal(installed.muscriptorInstalled, true)
+  const marker = JSON.parse(await fs.readFile(paths.marker, 'utf8'))
+  assert.equal(marker.flashAttentionVerified, true)
+  assert.equal(marker.muscriptorVerified, true)
 })

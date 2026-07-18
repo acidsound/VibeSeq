@@ -58,7 +58,11 @@ def cuda_runtime_root() -> Path:
     return model_runtime_dir() / CUDA_RUNTIME_BUNDLE
 
 
-def cuda_runtime_python(*, require_flash_attention: bool = True) -> Path | None:
+def cuda_runtime_python(
+    *,
+    require_flash_attention: bool = True,
+    require_muscriptor: bool = False,
+) -> Path | None:
     root = cuda_runtime_root()
     marker = root / ".vibeseq-runtime.json"
     python = root / "venv" / "Scripts" / "python.exe"
@@ -78,13 +82,19 @@ def cuda_runtime_python(*, require_flash_attention: bool = True) -> Path | None:
             require_flash_attention
             and value.get("flashAttentionVerified") is not True
         )
+        or (require_muscriptor and value.get("muscriptorVerified") is not True)
         or not python.is_file()
     ):
         return None
     return python
 
 
-def cuda_runtime_ready(*, require_flash_attention: bool = True) -> bool:
+def cuda_runtime_ready(
+    *,
+    require_flash_attention: bool = True,
+    require_muscriptor: bool = False,
+) -> bool:
     return cuda_runtime_python(
         require_flash_attention=require_flash_attention,
+        require_muscriptor=require_muscriptor,
     ) is not None

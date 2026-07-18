@@ -782,27 +782,34 @@ name = "vibeseq-windows-cuda-runtime"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "flash-attn", marker = "sys_platform == 'win32'" },
     { name = "hatchling", marker = "sys_platform == 'win32'" },
-    { name = "muscriptor", marker = "sys_platform == 'win32'" },
     { name = "platformdirs", marker = "sys_platform == 'win32'" },
-    { name = "sentencepiece", marker = "sys_platform == 'win32'" },
-    { name = "stable-audio-3", marker = "sys_platform == 'win32'" },
     { name = "torch", marker = "sys_platform == 'win32'" },
     { name = "torchaudio", marker = "sys_platform == 'win32'" },
 ]
 
+[package.optional-dependencies]
+muscriptor = [
+    { name = "muscriptor", marker = "sys_platform == 'win32'" },
+]
+stable-audio = [
+    { name = "flash-attn", marker = "sys_platform == 'win32'" },
+    { name = "sentencepiece", marker = "sys_platform == 'win32'" },
+    { name = "stable-audio-3", marker = "sys_platform == 'win32'" },
+]
+
 [package.metadata]
 requires-dist = [
-    { name = "flash-attn", url = "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.4.19/flash_attn-2.8.3%2Bcu126torch2.7-cp312-cp312-win_amd64.whl" },
+    { name = "flash-attn", marker = "extra == 'stable-audio'", url = "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.4.19/flash_attn-2.8.3%2Bcu126torch2.7-cp312-cp312-win_amd64.whl" },
     { name = "hatchling", specifier = ">=1.27" },
-    { name = "muscriptor", url = "https://github.com/muscriptor/muscriptor/archive/6c1460cc75e5f120948de7656da05b2c489e8715.zip" },
+    { name = "muscriptor", marker = "extra == 'muscriptor'", url = "https://github.com/muscriptor/muscriptor/archive/6c1460cc75e5f120948de7656da05b2c489e8715.zip" },
     { name = "platformdirs", specifier = ">=4.3,<5" },
-    { name = "sentencepiece", specifier = ">=0.2,<1" },
-    { name = "stable-audio-3", url = "https://github.com/Stability-AI/stable-audio-3/archive/b32763cf3b71c160f10a0daa4fa0e0d471b5772e.zip" },
+    { name = "sentencepiece", marker = "extra == 'stable-audio'", specifier = ">=0.2,<1" },
+    { name = "stable-audio-3", marker = "extra == 'stable-audio'", url = "https://github.com/Stability-AI/stable-audio-3/archive/b32763cf3b71c160f10a0daa4fa0e0d471b5772e.zip" },
     { name = "torch", specifier = "==2.7.1", index = "https://download.pytorch.org/whl/cu126" },
     { name = "torchaudio", specifier = "==2.7.1", index = "https://download.pytorch.org/whl/cu126" },
 ]
+provides-extras = ["stable-audio", "muscriptor"]
 
 [[package]]
 name = "watchfiles"

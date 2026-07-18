@@ -49,27 +49,40 @@ jobs:
             server/desktop-linux-requirements.txt
             desktop/cuda-runtime/uv.lock
       - if: runner.os == 'Windows'
-        name: Sync the locked isolated Windows CUDA runtime
+        name: Sync the locked Stable Audio CUDA profile
         shell: pwsh
         run: |
-          uv sync --project desktop/cuda-runtime --locked --python 3.12.10
+          uv sync --project desktop/cuda-runtime --locked --python 3.12.10 --extra stable-audio --inexact
           uv pip install --python desktop/cuda-runtime/.venv/Scripts/python.exe --no-deps --no-build-isolation --reinstall ./server
       - if: runner.os == 'Windows'
-        name: Verify pinned CUDA and FlashAttention imports
+        name: Verify Stable Audio without MuScriptor
         run: >-
           uv run --project desktop/cuda-runtime --locked --no-sync python -c
-          "import torch, flash_attn, muscriptor, sentencepiece; from flash_attn import flash_attn_func, flash_attn_kvpacked_func;
+          "import importlib.util, torch, flash_attn, sentencepiece; from flash_attn import flash_attn_func, flash_attn_kvpacked_func;
           from stable_audio_3 import StableAudioModel;
-          from muscriptor import TranscriptionModel;
           from vibeseq_inference.cuda_service import CudaModelManager;
-          from vibeseq_inference.muscriptor_cuda_worker import main as muscriptor_worker_main;
           from vibeseq_inference.stable_audio_cuda_worker import main as worker_main;
+          assert importlib.util.find_spec('muscriptor') is None;
           assert torch.__version__ == '2.7.1+cu126'; assert torch.version.cuda == '12.6';
           assert flash_attn.__version__.startswith('2.8.3'); assert callable(flash_attn_func);
           assert callable(flash_attn_kvpacked_func); assert callable(StableAudioModel.from_pretrained);
-          assert callable(TranscriptionModel.load_model); assert callable(CudaModelManager.generate);
-          assert callable(muscriptor_worker_main);
+          assert callable(CudaModelManager.generate);
           assert callable(worker_main)"
+      - if: runner.os == 'Windows'
+        name: Add the locked MuScriptor CUDA profile
+        run: >-
+          uv sync --project desktop/cuda-runtime --locked --python 3.12.10
+          --extra muscriptor --inexact
+      - if: runner.os == 'Windows'
+        name: Verify MuScriptor independently without removing Stable Audio
+        run: >-
+          uv run --project desktop/cuda-runtime --locked --no-sync python -c
+          "import torch, muscriptor, flash_attn; from muscriptor import TranscriptionModel;
+          from stable_audio_3 import StableAudioModel;
+          from vibeseq_inference.muscriptor_cuda_worker import main as worker_main;
+          assert torch.__version__ == '2.7.1+cu126'; assert torch.version.cuda == '12.6';
+          assert callable(TranscriptionModel.load_model); assert callable(worker_main);
+          assert callable(StableAudioModel.from_pretrained)"
       - run: npm ci
       - run: npm run check
       - run: npm run ${{ matrix.package_script }}
@@ -159,9 +172,11 @@ jobs:
 
           MuScriptor remains gated and is not redistributed. Each user accepts its Hugging Face conditions, downloads the pinned `config.json` and `model.safetensors` in their browser, and places them directly under **SAVE CACHE UNDER**. That exact revision folder opens in Finder, File Explorer, or the Linux file manager. VibeSeq does not download, select, or move these files or request or store a Hugging Face token; **Verify files in cache** only validates the files already in that folder.
 
-          Stable Audio and MuScriptor share one persistent managed CUDA service on Windows. Stable Audio is loaded once and retains VRAM priority across generations; MuScriptor remains GPU-resident only when measured VRAM headroom allows it and otherwise stays on CPU without evicting Stable Audio. CUDA generation uses the official 8-step schedule and exact requested latent duration instead of generating an extra six seconds. FlashAttention 2 remains specific to Stable Audio, and the service never opens a console window.
+          Stable Audio and MuScriptor share the base Python/CUDA PyTorch environment and one persistent managed CUDA service on Windows, but install and verify as independent runtime profiles. Missing or broken MuScriptor packages never block Stable Audio readiness or generation. Stable Audio is loaded once and retains VRAM priority across generations; MuScriptor remains GPU-resident only when measured VRAM headroom allows it and otherwise stays on CPU without evicting Stable Audio. CUDA generation uses the official 8-step schedule and exact requested latent duration instead of generating an extra six seconds. FlashAttention 2 remains specific to Stable Audio, and the service never opens a console window.
 
           Windows runtime installation clears and refreshes only the pinned FlashAttention wheel cache before synchronization, then automatically retries with an isolated temporary cache if interrupted installation metadata is incomplete. App shutdown terminates the complete sidecar, CUDA Python, and runtime-installer process trees; the persistent CUDA service also watches its parent process so it cannot remain orphaned and block a later Setup update.
+
+          **Windows alpha.17 users must not uninstall first.** Close VibeSeq and run the alpha.18 Setup over the same installation directory. The installer bypasses the legacy cross-volume uninstaller once, replaces the application in place, and keeps the existing `VibeSeq Data` directory beside the executable. Alpha.18 and later uninstallers preserve that directory on the same drive while application files are replaced, then restore it automatically.
 
           Powered by Stability AI.
 

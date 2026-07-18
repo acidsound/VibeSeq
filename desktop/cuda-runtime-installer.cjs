@@ -11,6 +11,18 @@ const FLASH_ATTENTION_PACKAGE = 'flash-attn'
 const UV_VERSION = '0.11.1'
 const UV_URL = 'https://github.com/astral-sh/uv/releases/download/0.11.1/uv-x86_64-pc-windows-msvc.zip'
 const UV_SHA256 = '6659250cebbd3bb6ee48bcb21a3f0c6656450d63fb97f0f069bcb532bdb688ed'
+const RUNTIME_PROFILES = Object.freeze({
+  'stable-audio': Object.freeze({
+    extra: 'stable-audio',
+    package: FLASH_ATTENTION_PACKAGE,
+    progress: 'Installing the Stable Audio CUDA and FlashAttention runtime',
+  }),
+  muscriptor: Object.freeze({
+    extra: 'muscriptor',
+    package: 'muscriptor',
+    progress: 'Installing the MuScriptor CUDA runtime',
+  }),
+})
 
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex')
 
@@ -159,20 +171,27 @@ class CudaRuntimeInstaller {
     )
     const installed = projectInstalled && marker?.cudaVerified === true
     const flashAttentionInstalled = installed && marker?.flashAttentionVerified === true
+    const muscriptorInstalled = installed && marker?.muscriptorVerified === true
     return {
       supported: this.platform === 'win32' && this.arch === 'x64',
       installed,
       flashAttentionInstalled,
+      muscriptorInstalled,
       bundleId: CUDA_RUNTIME_BUNDLE,
       runtimeRoot: paths.root,
       python: installed ? paths.python : null,
     }
   }
 
-  async install({ signal, onProgress = () => {}, requireFlashAttention = true }) {
+  async install({ signal, onProgress = () => {}, profile = 'stable-audio' } = {}) {
+    const profileConfiguration = RUNTIME_PROFILES[profile]
+    if (!profileConfiguration) throw new Error(`Unknown CUDA runtime profile: ${profile}`)
     const before = await this.status()
-    if (!before.supported) throw new Error('The CUDA/FlashAttention runtime is packaged only for Windows x64.')
-    if (before.installed && (!requireFlashAttention || before.flashAttentionInstalled)) return before
+    if (!before.supported) throw new Error('The managed CUDA runtime is packaged only for Windows x64.')
+    if (
+      (profile === 'stable-audio' && before.flashAttentionInstalled)
+      || (profile === 'muscriptor' && before.muscriptorInstalled)
+    ) return before
     const paths = runtimePaths(this.storageRoot)
     await fsp.mkdir(path.dirname(paths.uv), { recursive: true })
 
@@ -204,19 +223,21 @@ class CudaRuntimeInstaller {
     // copy mode, clearing only this package cache cannot damage an installed
     // runtime and avoids carrying the broken entry into the next attempt.
     let useTemporaryCache = false
-    onProgress('Refreshing the pinned FlashAttention wheel cache')
-    try {
-      await this.run({
-        command: paths.uv,
-        args: ['cache', 'clean', FLASH_ATTENTION_PACKAGE],
-        cwd: this.projectRoot,
-        env: environment,
-        signal,
-        onLine: onProgress,
-      })
-    } catch {
-      useTemporaryCache = true
-      onProgress('The shared package cache is unavailable; using a temporary cache')
+    if (profile === 'stable-audio') {
+      onProgress('Refreshing the pinned FlashAttention wheel cache')
+      try {
+        await this.run({
+          command: paths.uv,
+          args: ['cache', 'clean', FLASH_ATTENTION_PACKAGE],
+          cwd: this.projectRoot,
+          env: environment,
+          signal,
+          onLine: onProgress,
+        })
+      } catch {
+        useTemporaryCache = true
+        onProgress('The shared package cache is unavailable; using a temporary cache')
+      }
     }
 
     const syncArgs = [
@@ -226,13 +247,16 @@ class CudaRuntimeInstaller {
       '--locked',
       '--python',
       '3.12.10',
+      '--extra',
+      profileConfiguration.extra,
+      '--inexact',
       '--refresh-package',
-      FLASH_ATTENTION_PACKAGE,
+      profileConfiguration.package,
       '--reinstall-package',
-      FLASH_ATTENTION_PACKAGE,
+      profileConfiguration.package,
     ]
     if (useTemporaryCache) syncArgs.push('--no-cache')
-    onProgress('Installing isolated Python and CUDA PyTorch runtime')
+    onProgress(profileConfiguration.progress)
     try {
       await this.run({
         command: paths.uv,
@@ -243,7 +267,11 @@ class CudaRuntimeInstaller {
         onLine: onProgress,
       })
     } catch (error) {
-      if (useTemporaryCache || !isFlashAttentionCacheMetadataError(error)) throw error
+      if (
+        profile !== 'stable-audio'
+        || useTemporaryCache
+        || !isFlashAttentionCacheMetadataError(error)
+      ) throw error
       onProgress('Retrying the FlashAttention wheel with an isolated temporary cache')
       await this.run({
         command: paths.uv,
@@ -274,37 +302,30 @@ class CudaRuntimeInstaller {
       onLine: onProgress,
     })
 
-    onProgress(
-      requireFlashAttention
-        ? 'Running CUDA and FlashAttention 2 kernels on the detected NVIDIA GPU'
-        : 'Running a CUDA kernel for MuScriptor on the detected NVIDIA GPU',
-    )
+    onProgress(profile === 'stable-audio'
+      ? 'Running Stable Audio CUDA and FlashAttention 2 checks on the detected NVIDIA GPU'
+      : 'Running MuScriptor and CUDA checks on the detected NVIDIA GPU')
     const smokeStatements = [
       'import torch',
-      'import muscriptor',
-      'from muscriptor import TranscriptionModel',
-      'from vibeseq_inference.cuda_service import CudaModelManager',
-      'from vibeseq_inference.muscriptor_cuda_worker import main as muscriptor_worker_main',
       "assert torch.__version__ == '2.7.1+cu126', torch.__version__",
       "assert torch.version.cuda == '12.6', torch.version.cuda",
-      'assert callable(TranscriptionModel.load_model)',
-      'assert callable(CudaModelManager.generate)',
-      'assert callable(muscriptor_worker_main)',
       'assert torch.cuda.is_available()',
       "cuda_probe = torch.ones((32, 32), device='cuda', dtype=torch.float16)",
       'cuda_out = cuda_probe @ cuda_probe',
       'torch.cuda.synchronize()',
       'assert cuda_out.shape == cuda_probe.shape',
     ]
-    if (requireFlashAttention) {
+    if (profile === 'stable-audio') {
       smokeStatements.push(
         'import flash_attn',
         'import sentencepiece',
         'from flash_attn import flash_attn_func',
         'from stable_audio_3 import StableAudioModel',
+        'from vibeseq_inference.cuda_service import CudaModelManager',
         'from vibeseq_inference.stable_audio_cuda_worker import main as worker_main',
         "assert flash_attn.__version__.startswith('2.8.3'), flash_attn.__version__",
         'assert callable(StableAudioModel.from_pretrained)',
+        'assert callable(CudaModelManager.generate)',
         'assert callable(worker_main)',
         'major, _ = torch.cuda.get_device_capability(0)',
         'assert major >= 8',
@@ -312,6 +333,14 @@ class CudaRuntimeInstaller {
         'out = flash_attn_func(q, q, q, causal=False)',
         'torch.cuda.synchronize()',
         'assert out.shape == q.shape',
+      )
+    } else {
+      smokeStatements.push(
+        'import muscriptor',
+        'from muscriptor import TranscriptionModel',
+        'from vibeseq_inference.muscriptor_cuda_worker import main as worker_main',
+        'assert callable(TranscriptionModel.load_model)',
+        'assert callable(worker_main)',
       )
     }
     const smoke = smokeStatements.join('; ')
@@ -333,7 +362,8 @@ class CudaRuntimeInstaller {
       torch: '2.7.1+cu126',
       flashAttention: '2.8.3+cu126torch2.7',
       cudaVerified: true,
-      flashAttentionVerified: requireFlashAttention || before.flashAttentionInstalled,
+      flashAttentionVerified: profile === 'stable-audio' || before.flashAttentionInstalled,
+      muscriptorVerified: profile === 'muscriptor' || before.muscriptorInstalled,
       verifiedAt: new Date().toISOString(),
     }
     const temporary = `${paths.marker}.tmp`

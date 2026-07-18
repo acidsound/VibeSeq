@@ -82,11 +82,11 @@ const updateStartup = (update) => {
   }
 }
 
-const installCudaRuntime = ({ signal, requireFlashAttention, onProgress }) => {
+const installCudaRuntime = ({ signal, profile, onProgress }) => {
   const previous = cudaRuntimeInstallPromise || Promise.resolve()
   const current = previous.catch(() => undefined).then(() => cudaRuntimeInstaller.install({
     signal,
-    requireFlashAttention,
+    profile,
     onProgress,
   }))
   const queued = current.finally(() => {
@@ -125,13 +125,16 @@ ipcMain.handle('stable-audio:install', async (_event, request) => {
       const modelStatus = await installer.status()
       await installCudaRuntime({
         signal: modelInstallController.signal,
-        requireFlashAttention: true,
-        onProgress: (detail) => sendInstallProgress({
-          phase: 'runtime',
-          asset: detail,
-          downloadedBytes: 0,
-          totalBytes: modelStatus.totalBytes,
-        }),
+        profile: 'stable-audio',
+        onProgress: (detail) => {
+          appendDesktopLog(`[cuda-runtime:stable-audio] ${detail}`)
+          sendInstallProgress({
+            phase: 'runtime',
+            asset: detail,
+            downloadedBytes: 0,
+            totalBytes: modelStatus.totalBytes,
+          })
+        },
       })
     }
     const installed = await installer.install({
@@ -145,7 +148,10 @@ ipcMain.handle('stable-audio:install', async (_event, request) => {
       modelInstalled: installed.installed,
       runtimeInstalled: true,
     }
-  })().finally(() => {
+  })().catch((error) => {
+    appendDesktopLog(`[cuda-runtime:stable-audio] failed: ${error.stack ?? error.message}`)
+    throw error
+  }).finally(() => {
     modelInstallController = null
     modelInstallPromise = null
   })
@@ -155,19 +161,28 @@ ipcMain.handle('stable-audio:cancel', () => {
   modelInstallController?.abort()
   return { cancelled: Boolean(modelInstallController) }
 })
-ipcMain.handle('cuda-runtime:status', () => cudaRuntimeInstaller.status())
+const muscriptorRuntimeStatus = async () => {
+  const status = await cudaRuntimeInstaller.status()
+  return { ...status, installed: status.muscriptorInstalled }
+}
+
+ipcMain.handle('cuda-runtime:status', muscriptorRuntimeStatus)
 ipcMain.handle('cuda-runtime:install', () => {
   if (cudaRuntimeInstallController) return cudaRuntimeInstallPromise
   cudaRuntimeInstallController = new AbortController()
   const sendProgress = (detail) => {
+    appendDesktopLog(`[cuda-runtime:muscriptor] ${detail}`)
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('cuda-runtime:progress', { detail })
     }
   }
   const promise = installCudaRuntime({
     signal: cudaRuntimeInstallController.signal,
-    requireFlashAttention: false,
+    profile: 'muscriptor',
     onProgress: sendProgress,
+  }).then(muscriptorRuntimeStatus).catch((error) => {
+    appendDesktopLog(`[cuda-runtime:muscriptor] failed: ${error.stack ?? error.message}`)
+    throw error
   }).finally(() => {
     cudaRuntimeInstallController = null
   })

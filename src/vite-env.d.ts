@@ -40,6 +40,7 @@ type CudaRuntimeStatus = {
   supported: boolean
   installed: boolean
   flashAttentionInstalled?: boolean
+  muscriptorInstalled?: boolean
   bundleId: string
   runtimeRoot: string
   python?: string | null

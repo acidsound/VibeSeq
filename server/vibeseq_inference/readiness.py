@@ -62,6 +62,7 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
     artifact = MODEL_MANIFEST[route.artifact_key]
     isolated_cuda_ready = route.isolated and cuda_runtime_ready(
         require_flash_attention=route.id == "cuda-ampere-fa2",
+        require_muscriptor=route.id == "cuda-pytorch",
     )
     missing_packages = (
         ()

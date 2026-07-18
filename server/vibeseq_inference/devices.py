@@ -292,7 +292,10 @@ def muscriptor_runtime_route(
             or hardware.cuda_capability is not None
         )
     ):
-        runtime_ready = cuda_runtime_ready(require_flash_attention=False)
+        runtime_ready = cuda_runtime_ready(
+            require_flash_attention=False,
+            require_muscriptor=True,
+        )
         return RuntimeRoute(
             id="cuda-pytorch",
             runtime="pytorch-cuda",

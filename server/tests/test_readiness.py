@@ -435,12 +435,25 @@ def test_windows_muscriptor_selects_managed_cuda_without_changing_model_files(
     python.write_bytes(b"fixture")
     (runtime / ".vibeseq-runtime.json").write_text(
         '{"bundleId":"%s","projectDigest":"%s",'
-        '"cudaVerified":true,"flashAttentionVerified":false}'
+        '"cudaVerified":true,"flashAttentionVerified":true,'
+        '"muscriptorVerified":false}'
         % (CUDA_RUNTIME_BUNDLE, project_digest),
         encoding="utf-8",
     )
     monkeypatch.setenv("VIBESEQ_HOME", str(tmp_path))
     monkeypatch.setenv("VIBESEQ_CUDA_RUNTIME_PROJECT_DIGEST", project_digest)
+    stable_only = transcription_capability(real_settings(tmp_path), probe=detected)
+
+    assert stable_only["runtimeCompatible"] is False
+    assert stable_only["ready"] is False
+
+    (runtime / ".vibeseq-runtime.json").write_text(
+        '{"bundleId":"%s","projectDigest":"%s",'
+        '"cudaVerified":true,"flashAttentionVerified":false,'
+        '"muscriptorVerified":true}'
+        % (CUDA_RUNTIME_BUNDLE, project_digest),
+        encoding="utf-8",
+    )
     ready = transcription_capability(real_settings(tmp_path), probe=detected)
 
     assert ready["route"] == "cuda-pytorch"
