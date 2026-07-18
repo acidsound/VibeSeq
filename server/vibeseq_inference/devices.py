@@ -96,6 +96,7 @@ class RuntimeRoute:
     adapter_implemented: bool = True
     provisional: bool = False
     execution_enabled: bool = True
+    isolated: bool = False
     reason: str | None = None
 
 
@@ -192,6 +193,7 @@ def stable_audio_runtime_routes(
                     required_modules=("torch", "stable_audio_3", "flash_attn"),
                     required_files=STABLE_AUDIO_PYTORCH_FILES,
                     runtime_compatible=cuda_runtime_available,
+                    isolated=hardware.system == "Windows" and not hardware.cuda_available,
                     reason=(
                         None
                         if cuda_runtime_available
@@ -283,6 +285,32 @@ def muscriptor_runtime_route(
         route_id, runtime, device = "cpu-pytorch", "pytorch-cpu", "cpu"
     elif hardware.cuda_available:
         route_id, runtime, device = "cuda-pytorch", "pytorch-cuda", "cuda"
+    elif (
+        hardware.system == "Windows"
+        and (
+            hardware.cuda_hardware_detected
+            or hardware.cuda_capability is not None
+        )
+    ):
+        runtime_ready = cuda_runtime_ready(require_flash_attention=False)
+        return RuntimeRoute(
+            id="cuda-pytorch",
+            runtime="pytorch-cuda",
+            device="cuda",
+            artifact_key="muscriptor-medium-pytorch",
+            required_modules=("muscriptor",),
+            required_files=("config.json", "model.safetensors"),
+            runtime_compatible=runtime_ready,
+            isolated=True,
+            reason=(
+                None
+                if runtime_ready
+                else (
+                    "An NVIDIA GPU was detected, but the managed VibeSeq CUDA "
+                    "runtime for MuScriptor has not passed its on-device check."
+                )
+            ),
+        )
     elif hardware.mps_available:
         route_id, runtime, device = "apple-mps", "pytorch-mps", "mps"
     else:

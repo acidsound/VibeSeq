@@ -6,20 +6,12 @@ import shutil
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .models import NoteResult
 from .security import safe_error_message
 from .storage_paths import cuda_runtime_python
-
-
-@dataclass(frozen=True, slots=True)
-class CudaGenerationResult:
-    source_peak: float
-    output_peak: float
-    peak_protection_applied: bool
-    peak_attenuation_db: float
 
 
 def _worker_creation_flags() -> int:
@@ -45,37 +37,32 @@ def _terminate(process: subprocess.Popen[str]) -> None:
         process.wait(timeout=3)
 
 
-def run_cuda_generation(
+def run_cuda_transcription(
     *,
-    prompt: str,
-    duration: float,
-    seed: int,
+    input_path: Path,
     output_path: Path,
     progress,
     cancelled,
-) -> CudaGenerationResult:
-    python = cuda_runtime_python()
+) -> list[NoteResult]:
+    python = cuda_runtime_python(require_flash_attention=False)
     if python is None:
-        raise RuntimeError(
-            "The isolated Windows CUDA/FlashAttention runtime is not verified."
-        )
+        raise RuntimeError("The managed VibeSeq CUDA runtime is not verified.")
 
+    input_path = input_path.resolve()
     output_path = output_path.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    work_dir = Path(tempfile.mkdtemp(prefix="vibeseq-cuda-", dir=output_path.parent))
+    work_dir = Path(
+        tempfile.mkdtemp(prefix="vibeseq-muscriptor-cuda-", dir=output_path.parent)
+    )
     progress_path = work_dir / "progress.json"
     metadata_path = work_dir / "result.json"
     log_path = work_dir / "runtime.log"
     command = [
         str(python),
         "-m",
-        "vibeseq_inference.stable_audio_cuda_worker",
-        "--prompt",
-        prompt,
-        "--seconds",
-        str(duration),
-        "--seed",
-        str(seed),
+        "vibeseq_inference.muscriptor_cuda_worker",
+        "--input",
+        str(input_path),
         "--out",
         str(output_path),
         "--progress",
@@ -101,7 +88,7 @@ def run_cuda_generation(
                     _terminate(process)
                     from .providers.base import JobCancelled
 
-                    raise JobCancelled("Generation was cancelled.")
+                    raise JobCancelled("Transcription was cancelled.")
                 state = _read_json(progress_path)
                 if state is not None:
                     try:
@@ -112,22 +99,19 @@ def run_cuda_generation(
             if process.returncode != 0:
                 tail = log_path.read_text(encoding="utf-8", errors="replace")[-4000:]
                 raise RuntimeError(
-                    "Stable Audio 3 medium CUDA/FlashAttention runtime failed: "
+                    "MuScriptor medium CUDA runtime failed: "
                     + safe_error_message(tail, limit=1000)
                 )
         metadata = _read_json(metadata_path)
         if metadata is None or not output_path.is_file():
             tail = log_path.read_text(encoding="utf-8", errors="replace")[-2000:]
             raise RuntimeError(
-                "Stable Audio 3 medium CUDA runtime did not produce a complete "
-                "result. "
+                "MuScriptor medium CUDA runtime did not produce a complete result. "
                 + safe_error_message(tail, limit=600)
             )
-        return CudaGenerationResult(
-            source_peak=float(metadata["sourcePeak"]),
-            output_peak=float(metadata["outputPeak"]),
-            peak_protection_applied=bool(metadata["peakProtectionApplied"]),
-            peak_attenuation_db=float(metadata["peakAttenuationDb"]),
-        )
+        raw_notes = metadata.get("notes")
+        if not isinstance(raw_notes, list):
+            raise RuntimeError("MuScriptor CUDA metadata did not contain notes.")
+        return [NoteResult.model_validate(note) for note in raw_notes]
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)

@@ -64,6 +64,8 @@ test('installs the pinned CUDA runtime under VibeSeq Data and invalidates change
   ])
   assert.ok(commands[1].args.includes('--no-build-isolation'))
   assert.ok(commands[1].args.includes('--reinstall'))
+  assert.match(commands[2].args[1], /TranscriptionModel/)
+  assert.match(commands[2].args[1], /muscriptor_cuda_worker/)
   assert.match(commands[2].args[1], /flash_attn_func/)
   assert.match(commands[2].args[1], /torch\.cuda\.synchronize/)
 
@@ -89,6 +91,8 @@ test('repairs the isolated environment when the whole installation is moved', as
     bundleId: CUDA_RUNTIME_BUNDLE,
     projectDigest: await digest(projectRoot),
     storageRoot: oldStorage,
+    cudaVerified: true,
+    flashAttentionVerified: true,
   })}\n`)
   await fs.mkdir(path.dirname(newStorage), { recursive: true })
   await fs.rename(oldStorage, newStorage)
@@ -116,4 +120,40 @@ test('does not offer the CUDA runtime on CPU-only packaged platforms', async () 
   })
   assert.equal((await installer.status()).supported, false)
   await assert.rejects(() => installer.install({}), /only for Windows x64/)
+})
+
+test('MuScriptor verifies CUDA without requiring a FlashAttention-capable GPU', async () => {
+  const resourceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-muscriptor-cuda-resource-'))
+  const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-muscriptor-cuda-storage-'))
+  const { projectRoot } = await fixtureProject(resourceRoot)
+  const paths = runtimePaths(storageRoot)
+  await fs.mkdir(path.dirname(paths.uv), { recursive: true })
+  await fs.writeFile(paths.uv, 'fixture executable')
+  const commands = []
+  const runImpl = async (options) => {
+    commands.push(options)
+    if (options.args[0] === 'sync') {
+      await fs.mkdir(path.dirname(paths.python), { recursive: true })
+      await fs.writeFile(paths.python, 'fixture python')
+      await fs.writeFile(paths.configuration, 'home = fixture\n')
+    }
+    return ''
+  }
+  const installer = new CudaRuntimeInstaller({
+    storageRoot,
+    projectRoot,
+    platform: 'win32',
+    arch: 'x64',
+    runImpl,
+  })
+
+  const installed = await installer.install({ requireFlashAttention: false })
+
+  assert.equal(installed.installed, true)
+  assert.equal(installed.flashAttentionInstalled, false)
+  assert.match(commands[2].args[1], /TranscriptionModel/)
+  assert.doesNotMatch(commands[2].args[1], /flash_attn_func/)
+  const marker = JSON.parse(await fs.readFile(paths.marker, 'utf8'))
+  assert.equal(marker.cudaVerified, true)
+  assert.equal(marker.flashAttentionVerified, false)
 })

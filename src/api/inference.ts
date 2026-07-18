@@ -54,6 +54,11 @@ export type InferenceHealth = {
   hardware: {
     preferredDevice: string
     devices: string[]
+    forceCpu?: boolean
+    system?: string
+    machine?: string
+    cudaName?: string | null
+    cudaCapability?: [number, number] | null
   }
   generation: EngineCapability
   transcription: EngineCapability

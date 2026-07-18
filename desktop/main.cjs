@@ -35,6 +35,8 @@ let sidecarLog = null
 let quitting = false
 let modelInstallController = null
 let modelInstallPromise = null
+let cudaRuntimeInstallController = null
+let cudaRuntimeInstallPromise = null
 let studioOrigin = null
 let startupState = {
   phase: 'window',
@@ -79,6 +81,20 @@ const updateStartup = (update) => {
   }
 }
 
+const installCudaRuntime = ({ signal, requireFlashAttention, onProgress }) => {
+  const previous = cudaRuntimeInstallPromise || Promise.resolve()
+  const current = previous.catch(() => undefined).then(() => cudaRuntimeInstaller.install({
+    signal,
+    requireFlashAttention,
+    onProgress,
+  }))
+  const queued = current.finally(() => {
+    if (cudaRuntimeInstallPromise === queued) cudaRuntimeInstallPromise = null
+  })
+  cudaRuntimeInstallPromise = queued
+  return queued
+}
+
 ipcMain.handle('desktop:startup-state', () => startupState)
 ipcMain.handle('stable-audio:status', async (_event, request) => {
   const status = await stableAudioInstallerFor(request?.modelId).status()
@@ -87,8 +103,8 @@ ipcMain.handle('stable-audio:status', async (_event, request) => {
   return {
     ...status,
     modelInstalled: status.installed,
-    runtimeInstalled: runtime.installed,
-    installed: status.installed && runtime.installed,
+    runtimeInstalled: runtime.flashAttentionInstalled,
+    installed: status.installed && runtime.flashAttentionInstalled,
   }
 })
 ipcMain.handle('stable-audio:install', async (_event, request) => {
@@ -106,8 +122,9 @@ ipcMain.handle('stable-audio:install', async (_event, request) => {
   modelInstallPromise = (async () => {
     if (request?.modelId === stableAudioGpuManifest.modelId) {
       const modelStatus = await installer.status()
-      await cudaRuntimeInstaller.install({
+      await installCudaRuntime({
         signal: modelInstallController.signal,
+        requireFlashAttention: true,
         onProgress: (detail) => sendInstallProgress({
           phase: 'runtime',
           asset: detail,
@@ -136,6 +153,28 @@ ipcMain.handle('stable-audio:install', async (_event, request) => {
 ipcMain.handle('stable-audio:cancel', () => {
   modelInstallController?.abort()
   return { cancelled: Boolean(modelInstallController) }
+})
+ipcMain.handle('cuda-runtime:status', () => cudaRuntimeInstaller.status())
+ipcMain.handle('cuda-runtime:install', () => {
+  if (cudaRuntimeInstallController) return cudaRuntimeInstallPromise
+  cudaRuntimeInstallController = new AbortController()
+  const sendProgress = (detail) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('cuda-runtime:progress', { detail })
+    }
+  }
+  const promise = installCudaRuntime({
+    signal: cudaRuntimeInstallController.signal,
+    requireFlashAttention: false,
+    onProgress: sendProgress,
+  }).finally(() => {
+    cudaRuntimeInstallController = null
+  })
+  return promise
+})
+ipcMain.handle('cuda-runtime:cancel', () => {
+  cudaRuntimeInstallController?.abort()
+  return { cancelled: Boolean(cudaRuntimeInstallController) }
 })
 ipcMain.handle('muscriptor:verify-cache', () => muscriptorCacheVerifier.verify())
 ipcMain.handle('muscriptor:open-cache', async () => {

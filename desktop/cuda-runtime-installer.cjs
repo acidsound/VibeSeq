@@ -142,25 +142,28 @@ class CudaRuntimeInstaller {
     } catch {
       // Missing packaged project resources invalidate an older environment.
     }
-    const installed = Boolean(
+    const projectInstalled = Boolean(
       marker?.bundleId === CUDA_RUNTIME_BUNDLE
       && marker?.projectDigest === projectDigest
       && fs.existsSync(paths.python)
       && fs.existsSync(paths.configuration),
     )
+    const installed = projectInstalled && marker?.cudaVerified === true
+    const flashAttentionInstalled = installed && marker?.flashAttentionVerified === true
     return {
       supported: this.platform === 'win32' && this.arch === 'x64',
       installed,
+      flashAttentionInstalled,
       bundleId: CUDA_RUNTIME_BUNDLE,
       runtimeRoot: paths.root,
       python: installed ? paths.python : null,
     }
   }
 
-  async install({ signal, onProgress = () => {} }) {
+  async install({ signal, onProgress = () => {}, requireFlashAttention = true }) {
     const before = await this.status()
     if (!before.supported) throw new Error('The CUDA/FlashAttention runtime is packaged only for Windows x64.')
-    if (before.installed) return before
+    if (before.installed && (!requireFlashAttention || before.flashAttentionInstalled)) return before
     const paths = runtimePaths(this.storageRoot)
     await fsp.mkdir(path.dirname(paths.uv), { recursive: true })
 
@@ -186,7 +189,7 @@ class CudaRuntimeInstaller {
       UV_LINK_MODE: 'copy',
       UV_NO_PROGRESS: '1',
     }
-    onProgress('Installing isolated Python, CUDA PyTorch, and FlashAttention 2')
+    onProgress('Installing isolated Python and CUDA PyTorch runtime')
     await this.run({
       command: paths.uv,
       args: ['sync', '--project', this.projectRoot, '--locked', '--python', '3.12.10'],
@@ -215,27 +218,45 @@ class CudaRuntimeInstaller {
       onLine: onProgress,
     })
 
-    onProgress('Running a FlashAttention 2 kernel on the detected NVIDIA GPU')
-    const smoke = [
+    onProgress(
+      requireFlashAttention
+        ? 'Running CUDA and FlashAttention 2 kernels on the detected NVIDIA GPU'
+        : 'Running a CUDA kernel for MuScriptor on the detected NVIDIA GPU',
+    )
+    const smokeStatements = [
       'import torch',
-      'import flash_attn',
-      'import sentencepiece',
-      'from flash_attn import flash_attn_func',
-      'from stable_audio_3 import StableAudioModel',
-      'from vibeseq_inference.stable_audio_cuda_worker import main as worker_main',
+      'import muscriptor',
+      'from muscriptor import TranscriptionModel',
+      'from vibeseq_inference.muscriptor_cuda_worker import main as muscriptor_worker_main',
       "assert torch.__version__ == '2.7.1+cu126', torch.__version__",
       "assert torch.version.cuda == '12.6', torch.version.cuda",
-      "assert flash_attn.__version__.startswith('2.8.3'), flash_attn.__version__",
-      'assert callable(StableAudioModel.from_pretrained)',
-      'assert callable(worker_main)',
+      'assert callable(TranscriptionModel.load_model)',
+      'assert callable(muscriptor_worker_main)',
       'assert torch.cuda.is_available()',
-      'major, _ = torch.cuda.get_device_capability(0)',
-      'assert major >= 8',
-      "q = torch.randn((1, 128, 4, 64), device='cuda', dtype=torch.float16)",
-      'out = flash_attn_func(q, q, q, causal=False)',
+      "cuda_probe = torch.ones((32, 32), device='cuda', dtype=torch.float16)",
+      'cuda_out = cuda_probe @ cuda_probe',
       'torch.cuda.synchronize()',
-      'assert out.shape == q.shape',
-    ].join('; ')
+      'assert cuda_out.shape == cuda_probe.shape',
+    ]
+    if (requireFlashAttention) {
+      smokeStatements.push(
+        'import flash_attn',
+        'import sentencepiece',
+        'from flash_attn import flash_attn_func',
+        'from stable_audio_3 import StableAudioModel',
+        'from vibeseq_inference.stable_audio_cuda_worker import main as worker_main',
+        "assert flash_attn.__version__.startswith('2.8.3'), flash_attn.__version__",
+        'assert callable(StableAudioModel.from_pretrained)',
+        'assert callable(worker_main)',
+        'major, _ = torch.cuda.get_device_capability(0)',
+        'assert major >= 8',
+        "q = torch.randn((1, 128, 4, 64), device='cuda', dtype=torch.float16)",
+        'out = flash_attn_func(q, q, q, causal=False)',
+        'torch.cuda.synchronize()',
+        'assert out.shape == q.shape',
+      )
+    }
+    const smoke = smokeStatements.join('; ')
     await this.run({
       command: paths.python,
       args: ['-c', smoke],
@@ -253,6 +274,8 @@ class CudaRuntimeInstaller {
       python: '3.12.10',
       torch: '2.7.1+cu126',
       flashAttention: '2.8.3+cu126torch2.7',
+      cudaVerified: true,
+      flashAttentionVerified: requireFlashAttention || before.flashAttentionInstalled,
       verifiedAt: new Date().toISOString(),
     }
     const temporary = `${paths.marker}.tmp`

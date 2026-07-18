@@ -25,6 +25,16 @@ contextBridge.exposeInMainWorld('vibeseqDesktop', {
       return () => ipcRenderer.removeListener('stable-audio:progress', handler)
     },
   },
+  cudaRuntime: {
+    status: () => ipcRenderer.invoke('cuda-runtime:status'),
+    install: () => ipcRenderer.invoke('cuda-runtime:install'),
+    cancel: () => ipcRenderer.invoke('cuda-runtime:cancel'),
+    onProgress: (listener) => {
+      const handler = (_event, progress) => listener(progress)
+      ipcRenderer.on('cuda-runtime:progress', handler)
+      return () => ipcRenderer.removeListener('cuda-runtime:progress', handler)
+    },
+  },
   muscriptor: {
     verifyCache: () => ipcRenderer.invoke('muscriptor:verify-cache'),
     openCacheFolder: () => ipcRenderer.invoke('muscriptor:open-cache'),

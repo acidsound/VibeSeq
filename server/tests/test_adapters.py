@@ -20,7 +20,7 @@ from vibeseq_inference.model_manifest import (
     MUSCRIPTOR_MEDIUM,
     STABLE_AUDIO_3_MEDIUM,
 )
-from vibeseq_inference.models import GenerateRequest
+from vibeseq_inference.models import GenerateRequest, NoteResult
 from vibeseq_inference.providers.muscriptor import MuScriptorProvider
 from vibeseq_inference.providers.factory import (
     generation_provider,
@@ -185,6 +185,63 @@ def test_muscriptor_adapter_falls_back_and_preserves_note_events(
         "velocity": 100,
         "instrument": "electric bass",
     }
+
+
+def test_windows_muscriptor_uses_verified_isolated_cuda_worker(
+    tmp_path: Path, monkeypatch
+) -> None:
+    provider = MuScriptorProvider("medium")
+    route = RuntimeRoute(
+        id="cuda-pytorch",
+        runtime="pytorch-cuda",
+        device="cuda",
+        artifact_key="muscriptor-medium-pytorch",
+        required_modules=("muscriptor",),
+        required_files=("config.json", "model.safetensors"),
+        isolated=True,
+    )
+    monkeypatch.setattr(provider, "_route", lambda: route)
+    monkeypatch.setattr(
+        provider,
+        "_import_model",
+        lambda: pytest.fail("The CPU sidecar must not import MuScriptor for CUDA."),
+    )
+    calls: list[Path] = []
+
+    def run_fixture(**kwargs):
+        calls.append(kwargs["input_path"])
+        kwargs["output_path"].write_bytes(b"MThd-cuda-fixture")
+        return [
+            NoteResult(
+                pitch=64,
+                start_time=0.25,
+                end_time=0.75,
+                velocity=100,
+                instrument="electric bass",
+            )
+        ]
+
+    monkeypatch.setattr(
+        "vibeseq_inference.providers.muscriptor.run_cuda_transcription",
+        run_fixture,
+    )
+    input_path = tmp_path / "cuda-input.wav"
+    input_path.write_bytes(b"fixture")
+    output_path = tmp_path / "cuda-output.mid"
+
+    artifact = provider.transcribe(
+        input_path,
+        output_path,
+        lambda _: None,
+        lambda: False,
+    )
+
+    assert calls == [input_path]
+    assert output_path.read_bytes() == b"MThd-cuda-fixture"
+    assert artifact.device == "cuda"
+    assert artifact.runtime == "pytorch-cuda"
+    assert artifact.route == "cuda-pytorch"
+    assert artifact.notes[0].pitch == 64
 
 
 def test_muscriptor_adds_silent_left_context_and_restores_result_timestamps(

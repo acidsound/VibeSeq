@@ -5,9 +5,10 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from ..devices import available_devices
+from ..devices import available_devices, muscriptor_runtime_route
 from ..model_manifest import MUSCRIPTOR_MEDIUM
 from ..models import NoteResult
+from ..muscriptor_cuda import run_cuda_transcription
 from .base import (
     JobCancelled,
     ProviderError,
@@ -103,6 +104,48 @@ def _restore_event_timeline(
     return corrected
 
 
+def _transcribe_loaded_model(
+    model,
+    prepared_audio,
+    original_duration_seconds: float,
+    output_path: Path,
+    progress,
+    cancelled,
+) -> list[NoteResult]:
+    events = []
+    for event in model.transcribe(prepared_audio):
+        if cancelled():
+            raise JobCancelled("Transcription was cancelled.")
+        events.append(event)
+        completed = getattr(event, "completed", None)
+        total = getattr(event, "total", None)
+        if completed is not None and total:
+            progress(0.2 + 0.65 * completed / total)
+
+    corrected_events = _restore_event_timeline(events, original_duration_seconds)
+    notes: list[NoteResult] = []
+    for event in corrected_events:
+        start_event = getattr(event, "start_event", None)
+        end_time = getattr(event, "end_time", None)
+        if start_event is None or end_time is None:
+            continue
+        start_time = float(start_event.start_time)
+        end_value = float(end_time)
+        if end_value <= start_time:
+            continue
+        notes.append(
+            NoteResult(
+                pitch=int(start_event.pitch),
+                start_time=start_time,
+                end_time=end_value,
+                velocity=100,
+                instrument=str(start_event.instrument).replace("_", " "),
+            )
+        )
+    output_path.write_bytes(model.events_to_midi_bytes(iter(corrected_events)))
+    return notes
+
+
 class MuScriptorProvider:
     name = "muscriptor"
 
@@ -177,6 +220,9 @@ class MuScriptorProvider:
     def _devices(self) -> list[str]:
         return available_devices(force_cpu=self.force_cpu)
 
+    def _route(self):
+        return muscriptor_runtime_route(force_cpu=self.force_cpu)
+
     def transcribe(
         self,
         input_path: Path,
@@ -184,6 +230,31 @@ class MuScriptorProvider:
         progress,
         cancelled,
     ) -> TranscriptionArtifact:
+        route = self._route()
+        if route.isolated:
+            if not route.runtime_compatible:
+                raise ProviderUnavailable(
+                    route.reason
+                    or "The managed VibeSeq CUDA runtime for MuScriptor is unavailable."
+                )
+            notes = run_cuda_transcription(
+                input_path=input_path,
+                output_path=output_path,
+                progress=progress,
+                cancelled=cancelled,
+            )
+            return TranscriptionArtifact(
+                notes=notes,
+                provider=self.name,
+                device="cuda",
+                model=MUSCRIPTOR_MEDIUM.model,
+                model_id=MUSCRIPTOR_MEDIUM.model_id,
+                model_revision=MUSCRIPTOR_MEDIUM.model_revision,
+                code_revision=MUSCRIPTOR_MEDIUM.code_revision,
+                runtime="pytorch-cuda",
+                route="cuda-pytorch",
+            )
+
         self._import_model()
         if cancelled():
             raise JobCancelled("Transcription was cancelled.")
@@ -199,40 +270,13 @@ class MuScriptorProvider:
             try:
                 model = self._load(device)
                 progress(0.2)
-                events = []
-                for event in model.transcribe(prepared_audio):
-                    if cancelled():
-                        raise JobCancelled("Transcription was cancelled.")
-                    events.append(event)
-                    completed = getattr(event, "completed", None)
-                    total = getattr(event, "total", None)
-                    if completed is not None and total:
-                        progress(0.2 + 0.65 * completed / total)
-
-                corrected_events = _restore_event_timeline(
-                    events, original_duration_seconds
-                )
-                notes: list[NoteResult] = []
-                for event in corrected_events:
-                    start_event = getattr(event, "start_event", None)
-                    end_time = getattr(event, "end_time", None)
-                    if start_event is None or end_time is None:
-                        continue
-                    start_time = float(start_event.start_time)
-                    end_value = float(end_time)
-                    if end_value <= start_time:
-                        continue
-                    notes.append(
-                        NoteResult(
-                            pitch=int(start_event.pitch),
-                            start_time=start_time,
-                            end_time=end_value,
-                            velocity=100,
-                            instrument=str(start_event.instrument).replace("_", " "),
-                        )
-                    )
-                output_path.write_bytes(
-                    model.events_to_midi_bytes(iter(corrected_events))
+                notes = _transcribe_loaded_model(
+                    model,
+                    prepared_audio,
+                    original_duration_seconds,
+                    output_path,
+                    progress,
+                    cancelled,
                 )
                 progress(0.98)
                 return TranscriptionArtifact(

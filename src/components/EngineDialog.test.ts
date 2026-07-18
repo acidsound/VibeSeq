@@ -84,7 +84,14 @@ const blockedMuscriptorHealth = (): InferenceHealth => {
 
 const blockedWindowsGpuHealth = (): InferenceHealth => {
   const health = blockedHealth()
-  health.hardware = { preferredDevice: 'cuda', devices: ['cuda', 'cpu'] }
+  health.hardware = {
+    preferredDevice: 'cpu',
+    devices: ['cpu'],
+    system: 'Windows',
+    machine: 'AMD64',
+    cudaName: 'NVIDIA GeForce RTX 4090',
+    cudaCapability: [8, 9],
+  }
   health.generation = {
     ...health.generation,
     modelId: 'stabilityai/stable-audio-3-medium',
@@ -102,6 +109,27 @@ const blockedWindowsGpuHealth = (): InferenceHealth => {
       accessUrl: 'https://huggingface.co/stabilityai/stable-audio-3-medium',
       requiresApproval: true,
     },
+  }
+  return health
+}
+
+const blockedWindowsMuscriptorCudaHealth = (): InferenceHealth => {
+  const health = blockedMuscriptorHealth()
+  health.hardware = {
+    preferredDevice: 'cpu',
+    devices: ['cpu'],
+    system: 'Windows',
+    machine: 'AMD64',
+    cudaName: 'NVIDIA GeForce RTX 4090',
+    cudaCapability: [8, 9],
+  }
+  health.transcription = {
+    ...health.transcription,
+    device: 'cuda',
+    runtime: 'pytorch-cuda',
+    route: 'cuda-pytorch',
+    runtimeCompatible: false,
+    reason: 'The managed VibeSeq CUDA runtime has not passed its on-device check.',
   }
   return health
 }
@@ -235,6 +263,9 @@ describe('EngineDialog model installation guidance', () => {
       onClose: vi.fn(),
     }))
 
+    expect(screen.getByText('GPU')).not.toBeNull()
+    expect(screen.getByText('NVIDIA GeForce RTX 4090 · CUDA · FlashAttention 2')).not.toBeNull()
+    expect(screen.queryByText('CPU')).toBeNull()
     const download = await screen.findByRole('button', { name: /Download & install 10.44 GB/ })
     fireEvent.click(screen.getByRole('checkbox'))
     expect(download.hasAttribute('disabled')).toBe(false)
@@ -345,6 +376,59 @@ describe('EngineDialog model installation guidance', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Verify files in cache' }))
 
     await waitFor(() => expect(verifyCache).toHaveBeenCalledOnce())
+    await waitFor(() => expect(onModelInstalled).toHaveBeenCalledOnce())
+  })
+
+  it('installs the shared CUDA runtime for MuScriptor without changing model files', async () => {
+    const install = vi.fn().mockResolvedValue({
+      supported: true,
+      installed: true,
+      flashAttentionInstalled: false,
+      bundleId: 'windows-cuda-runtime-fixture',
+      runtimeRoot: 'G:\\VibeSeq\\VibeSeq Data\\runtimes\\cuda',
+    })
+    const onModelInstalled = vi.fn()
+    window.vibeseqDesktop = {
+      stableAudio: {
+        status: vi.fn(),
+        install: vi.fn(),
+        cancel: vi.fn(),
+        onProgress: vi.fn(() => () => undefined),
+      },
+      cudaRuntime: {
+        status: vi.fn().mockResolvedValue({
+          supported: true,
+          installed: false,
+          bundleId: 'windows-cuda-runtime-fixture',
+          runtimeRoot: 'G:\\VibeSeq\\VibeSeq Data\\runtimes\\cuda',
+        }),
+        install,
+        cancel: vi.fn(),
+        onProgress: vi.fn(() => () => undefined),
+      },
+      muscriptor: { verifyCache: vi.fn(), openCacheFolder: vi.fn() },
+      modelCache: { open: vi.fn() },
+      openExternal: vi.fn(),
+    }
+
+    render(createElement(EngineDialog, {
+      health: blockedWindowsMuscriptorCudaHealth(),
+      generationProvider: 'procedural-demo',
+      transcriptionProvider: 'muscriptor',
+      onGenerationProvider: vi.fn(),
+      onTranscriptionProvider: vi.fn(),
+      onModelInstalled,
+      onClose: vi.fn(),
+    }))
+
+    expect(screen.getByText('GPU')).not.toBeNull()
+    expect(screen.getByText('NVIDIA GeForce RTX 4090 · CUDA · PyTorch')).not.toBeNull()
+    expect(screen.getByText(/model files and cache path do not change/)).not.toBeNull()
+    expect(screen.getAllByText('config.json')).toHaveLength(2)
+    expect(screen.getAllByText('model.safetensors')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Install CUDA runtime' }))
+
+    await waitFor(() => expect(install).toHaveBeenCalledOnce())
     await waitFor(() => expect(onModelInstalled).toHaveBeenCalledOnce())
   })
 

@@ -354,7 +354,8 @@ def test_windows_4090_uses_verified_isolated_cuda_runtime(
     python.parent.mkdir(parents=True)
     python.write_bytes(b"fixture")
     (runtime / ".vibeseq-runtime.json").write_text(
-        '{"bundleId":"%s","projectDigest":"%s"}'
+        '{"bundleId":"%s","projectDigest":"%s",'
+        '"cudaVerified":true,"flashAttentionVerified":true}'
         % (CUDA_RUNTIME_BUNDLE, project_digest),
         encoding="utf-8",
     )
@@ -399,6 +400,53 @@ def test_windows_4090_uses_verified_isolated_cuda_runtime(
     )
     assert stale["runtimeCompatible"] is False
     assert stale["ready"] is False
+
+
+def test_windows_muscriptor_selects_managed_cuda_without_changing_model_files(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "vibeseq_inference.readiness.cached_files",
+        lambda *_: (True, ()),
+    )
+    detected = HardwareProbe(
+        "Windows",
+        "AMD64",
+        False,
+        (8, 9),
+        "NVIDIA GeForce RTX 4090",
+        False,
+        cuda_hardware_detected=True,
+    )
+
+    blocked = transcription_capability(real_settings(tmp_path), probe=detected)
+
+    assert blocked["route"] == "cuda-pytorch"
+    assert blocked["device"] == "cuda"
+    assert blocked["runtime"] == "pytorch-cuda"
+    assert blocked["runtimeCompatible"] is False
+    assert blocked["ready"] is False
+    assert blocked["bootstrap"]["files"] == ["config.json", "model.safetensors"]
+
+    project_digest = "c" * 64
+    runtime = tmp_path / "runtimes" / CUDA_RUNTIME_BUNDLE
+    python = runtime / "venv" / "Scripts" / "python.exe"
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b"fixture")
+    (runtime / ".vibeseq-runtime.json").write_text(
+        '{"bundleId":"%s","projectDigest":"%s",'
+        '"cudaVerified":true,"flashAttentionVerified":false}'
+        % (CUDA_RUNTIME_BUNDLE, project_digest),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VIBESEQ_HOME", str(tmp_path))
+    monkeypatch.setenv("VIBESEQ_CUDA_RUNTIME_PROJECT_DIGEST", project_digest)
+    ready = transcription_capability(real_settings(tmp_path), probe=detected)
+
+    assert ready["route"] == "cuda-pytorch"
+    assert ready["runtimeCompatible"] is True
+    assert ready["packageInstalled"] is True
+    assert ready["ready"] is True
 
 
 def test_t4_sdpa_is_provisional_and_disabled_by_default(

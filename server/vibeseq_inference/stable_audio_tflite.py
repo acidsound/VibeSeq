@@ -44,6 +44,10 @@ class TfliteGenerationResult:
     threads: int
 
 
+def _worker_creation_flags() -> int:
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+
 def runtime_root() -> Path:
     return runtime_checkout() / "optimized" / "tflite"
 
@@ -183,6 +187,7 @@ def run_tflite_generation(
                 stderr=subprocess.STDOUT,
                 text=True,
                 env=environment,
+                creationflags=_worker_creation_flags(),
             )
             while process.poll() is None:
                 if cancelled():

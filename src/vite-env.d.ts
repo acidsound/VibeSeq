@@ -36,6 +36,19 @@ type MuscriptorVerifyResult = {
   files?: string[]
 }
 
+type CudaRuntimeStatus = {
+  supported: boolean
+  installed: boolean
+  flashAttentionInstalled?: boolean
+  bundleId: string
+  runtimeRoot: string
+  python?: string | null
+}
+
+type CudaRuntimeProgress = {
+  detail: string
+}
+
 interface Window {
   vibeseqDesktop?: {
     startup?: {
@@ -65,6 +78,12 @@ interface Window {
       }) => Promise<StableAudioInstallStatus>
       cancel: () => Promise<{ cancelled: boolean }>
       onProgress: (listener: (progress: StableAudioInstallProgress) => void) => () => void
+    }
+    cudaRuntime?: {
+      status: () => Promise<CudaRuntimeStatus>
+      install: () => Promise<CudaRuntimeStatus>
+      cancel: () => Promise<{ cancelled: boolean }>
+      onProgress: (listener: (progress: CudaRuntimeProgress) => void) => () => void
     }
     muscriptor: {
       verifyCache: () => Promise<MuscriptorVerifyResult>

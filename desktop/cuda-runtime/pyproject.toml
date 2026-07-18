@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = "==3.12.*"
 dependencies = [
   "stable-audio-3 @ https://github.com/Stability-AI/stable-audio-3/archive/b32763cf3b71c160f10a0daa4fa0e0d471b5772e.zip",
+  "muscriptor @ https://github.com/muscriptor/muscriptor/archive/6c1460cc75e5f120948de7656da05b2c489e8715.zip",
   "flash-attn @ https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.4.19/flash_attn-2.8.3%2Bcu126torch2.7-cp312-cp312-win_amd64.whl",
   "sentencepiece>=0.2,<1",
   "platformdirs>=4.3,<5",

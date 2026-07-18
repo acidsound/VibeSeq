@@ -79,12 +79,21 @@ function EngineCapabilityCard({
   const desktopMuscriptorVerifier = kind === 'transcription' && selectedProvider === 'muscriptor'
     ? window.vibeseqDesktop?.muscriptor
     : undefined
+  const desktopCudaRuntime = kind === 'transcription' && selectedProvider === 'muscriptor'
+    ? window.vibeseqDesktop?.cudaRuntime
+    : undefined
   const desktopModelCache = window.vibeseqDesktop?.modelCache
+  const muscriptorCudaRuntimeRequired = Boolean(
+    desktopMuscriptorVerifier
+    && capability?.device === 'cuda'
+    && capability.runtimeCompatible === false,
+  )
   const showModelInstallation = Boolean(
     capability?.bootstrap
     && (
       capability.weightsCached === false
       || (desktopInstaller && capability.ready === false)
+      || muscriptorCudaRuntimeRequired
     ),
   )
   const [installStatus, setInstallStatus] = useState<StableAudioInstallStatus | null>(null)
@@ -94,6 +103,10 @@ function EngineCapabilityCard({
   const [installError, setInstallError] = useState<string | null>(null)
   const [verifyingMuscriptor, setVerifyingMuscriptor] = useState(false)
   const [muscriptorVerifyError, setMuscriptorVerifyError] = useState<string | null>(null)
+  const [cudaRuntimeStatus, setCudaRuntimeStatus] = useState<CudaRuntimeStatus | null>(null)
+  const [cudaRuntimeProgress, setCudaRuntimeProgress] = useState<CudaRuntimeProgress | null>(null)
+  const [installingCudaRuntime, setInstallingCudaRuntime] = useState(false)
+  const [cudaRuntimeError, setCudaRuntimeError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!desktopInstaller || capability?.ready !== false) return
@@ -113,6 +126,25 @@ function EngineCapabilityCard({
       unsubscribe()
     }
   }, [capability?.modelId, capability?.ready, desktopInstaller])
+
+  useEffect(() => {
+    if (!desktopCudaRuntime || !muscriptorCudaRuntimeRequired) return
+    let active = true
+    void desktopCudaRuntime.status().then((status) => {
+      if (active) setCudaRuntimeStatus(status)
+    }).catch((error) => {
+      if (active) setCudaRuntimeError(error instanceof Error ? error.message : String(error))
+    })
+    const unsubscribe = desktopCudaRuntime.onProgress((progress) => {
+      if (!active) return
+      setCudaRuntimeProgress(progress)
+      setInstallingCudaRuntime(true)
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [desktopCudaRuntime, muscriptorCudaRuntimeRequired])
 
   const startInstallation = async () => {
     if (!desktopInstaller || !termsAccepted) return
@@ -155,6 +187,26 @@ function EngineCapabilityCard({
     } finally {
       setVerifyingMuscriptor(false)
     }
+  }
+
+  const installMuscriptorCudaRuntime = async () => {
+    if (!desktopCudaRuntime) return
+    setCudaRuntimeError(null)
+    setInstallingCudaRuntime(true)
+    try {
+      const status = await desktopCudaRuntime.install()
+      setCudaRuntimeStatus(status)
+      await onModelInstalled?.()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/abort|cancel/i.test(message)) setCudaRuntimeError(message)
+    } finally {
+      setInstallingCudaRuntime(false)
+    }
+  }
+
+  const cancelMuscriptorCudaRuntime = async () => {
+    await desktopCudaRuntime?.cancel()
   }
 
   const muscriptorRevision = capability?.bootstrap?.revision || capability?.modelRevision
@@ -271,6 +323,32 @@ function EngineCapabilityCard({
               <li key={file}>{file}</li>
             ))}
           </ul>
+          {desktopCudaRuntime && muscriptorCudaRuntimeRequired && (
+            <div className="engine-model-downloader" aria-label="MuScriptor CUDA runtime installation">
+              <b>CUDA RUNTIME</b>
+              <p>MuScriptor uses the same managed CUDA PyTorch runtime as Stable Audio. Its model files and cache path do not change.</p>
+              {installingCudaRuntime && (
+                <div className="engine-download-progress">
+                  <progress aria-label="MuScriptor CUDA runtime installation progress" />
+                  <small>{cudaRuntimeProgress?.detail || 'Preparing the managed CUDA runtime'}</small>
+                </div>
+              )}
+              {cudaRuntimeError && <p className="engine-install-error" role="alert">{cudaRuntimeError}</p>}
+              {installingCudaRuntime ? (
+                <button type="button" className="secondary-button" onClick={() => void cancelMuscriptorCudaRuntime()}><Square /> Cancel runtime install</button>
+              ) : (
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={cudaRuntimeStatus?.supported === false}
+                  onClick={() => void installMuscriptorCudaRuntime()}
+                >
+                  <Download /> {cudaRuntimeStatus?.installed ? 'Refresh CUDA readiness' : 'Install CUDA runtime'}
+                </button>
+              )}
+              <small>The managed runtime is installed below VibeSeq Data and does not modify the system Python environment.</small>
+            </div>
+          )}
           {desktopInstaller && installStatus?.supported && (
             <div className="engine-model-downloader">
               <label className="engine-license-consent">
@@ -366,6 +444,23 @@ export function EngineDialog({
   const dialogRef = useModalFocus<HTMLElement>()
   const serviceHealthy = health?.status === 'ok'
   const devices = health?.hardware.devices?.map((device) => device.toUpperCase()).join(' → ') || 'not reported'
+  const selectedGeneration = capabilityFor(health, 'generation', generationProvider)
+  const selectedTranscription = capabilityFor(health, 'transcription', transcriptionProvider)
+  const cudaCapability = [selectedGeneration, selectedTranscription].find((candidate) => (
+    candidate?.device?.toLowerCase() === 'cuda'
+    || candidate?.route?.startsWith('cuda-') === true
+  ))
+  const computeLabel = cudaCapability
+    ? 'GPU'
+    : health?.hardware.preferredDevice?.toUpperCase() ?? 'NO DEVICE REPORT'
+  const cudaRuntimeLabel = cudaCapability?.runtime === 'pytorch-fa2'
+    ? 'CUDA · FlashAttention 2'
+    : cudaCapability?.runtime === 'pytorch-cuda'
+      ? 'CUDA · PyTorch'
+      : cudaCapability?.runtime || cudaCapability?.route || 'CUDA'
+  const computeDetail = cudaCapability
+    ? `${health?.hardware.cudaName || 'NVIDIA CUDA GPU'} · ${cudaRuntimeLabel}`
+    : `Target ${health?.target ?? 'unknown'} · route order ${devices}`
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -387,8 +482,8 @@ export function EngineDialog({
         <div className={`hardware-card ${serviceHealthy ? 'is-healthy' : 'is-offline'}`} role="status">
           <MonitorCog />
           <div>
-            <b>{health?.hardware.preferredDevice?.toUpperCase() ?? 'NO DEVICE REPORT'}</b>
-            <small>Target {health?.target ?? 'unknown'} · route order {devices}</small>
+            <b>{computeLabel}</b>
+            <small>{computeDetail}</small>
           </div>
           <span>{serviceHealthy ? 'HEALTH RESPONDED' : 'NO HEALTH RESPONSE'}</span>
         </div>
