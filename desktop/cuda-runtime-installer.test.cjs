@@ -65,6 +65,7 @@ test('installs the pinned CUDA runtime under VibeSeq Data and invalidates change
   assert.ok(commands[1].args.includes('--no-build-isolation'))
   assert.ok(commands[1].args.includes('--reinstall'))
   assert.match(commands[2].args[1], /TranscriptionModel/)
+  assert.match(commands[2].args[1], /CudaModelManager/)
   assert.match(commands[2].args[1], /muscriptor_cuda_worker/)
   assert.match(commands[2].args[1], /flash_attn_func/)
   assert.match(commands[2].args[1], /torch\.cuda\.synchronize/)

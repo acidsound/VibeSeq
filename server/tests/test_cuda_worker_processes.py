@@ -3,13 +3,12 @@ from __future__ import annotations
 import pytest
 
 from vibeseq_inference import (
-    muscriptor_cuda,
-    stable_audio_cuda,
+    cuda_service_client,
     stable_audio_tflite,
 )
 
 
-WORKER_MODULES = [stable_audio_cuda, stable_audio_tflite, muscriptor_cuda]
+WORKER_MODULES = [cuda_service_client, stable_audio_tflite]
 
 
 @pytest.mark.parametrize("module", WORKER_MODULES)

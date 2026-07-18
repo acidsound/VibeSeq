@@ -237,22 +237,23 @@ class MuScriptorProvider:
                     route.reason
                     or "The managed VibeSeq CUDA runtime for MuScriptor is unavailable."
                 )
-            notes = run_cuda_transcription(
+            result = run_cuda_transcription(
                 input_path=input_path,
                 output_path=output_path,
                 progress=progress,
                 cancelled=cancelled,
             )
+            actual_device = result.device
             return TranscriptionArtifact(
-                notes=notes,
+                notes=result.notes,
                 provider=self.name,
-                device="cuda",
+                device=actual_device,
                 model=MUSCRIPTOR_MEDIUM.model,
                 model_id=MUSCRIPTOR_MEDIUM.model_id,
                 model_revision=MUSCRIPTOR_MEDIUM.model_revision,
                 code_revision=MUSCRIPTOR_MEDIUM.code_revision,
-                runtime="pytorch-cuda",
-                route="cuda-pytorch",
+                runtime=("pytorch-cuda" if actual_device == "cuda" else "pytorch-cpu"),
+                route=("cuda-pytorch" if actual_device == "cuda" else "cpu-pytorch"),
             )
 
         self._import_model()

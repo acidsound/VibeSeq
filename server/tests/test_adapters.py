@@ -21,6 +21,7 @@ from vibeseq_inference.model_manifest import (
     STABLE_AUDIO_3_MEDIUM,
 )
 from vibeseq_inference.models import GenerateRequest, NoteResult
+from vibeseq_inference.muscriptor_cuda import CudaTranscriptionResult
 from vibeseq_inference.providers.muscriptor import MuScriptorProvider
 from vibeseq_inference.providers.factory import (
     generation_provider,
@@ -211,15 +212,18 @@ def test_windows_muscriptor_uses_verified_isolated_cuda_worker(
     def run_fixture(**kwargs):
         calls.append(kwargs["input_path"])
         kwargs["output_path"].write_bytes(b"MThd-cuda-fixture")
-        return [
-            NoteResult(
-                pitch=64,
-                start_time=0.25,
-                end_time=0.75,
-                velocity=100,
-                instrument="electric bass",
-            )
-        ]
+        return CudaTranscriptionResult(
+            notes=[
+                NoteResult(
+                    pitch=64,
+                    start_time=0.25,
+                    end_time=0.75,
+                    velocity=100,
+                    instrument="electric bass",
+                )
+            ],
+            device="cuda",
+        )
 
     monkeypatch.setattr(
         "vibeseq_inference.providers.muscriptor.run_cuda_transcription",

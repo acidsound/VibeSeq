@@ -61,12 +61,14 @@ jobs:
           "import torch, flash_attn, muscriptor, sentencepiece; from flash_attn import flash_attn_func, flash_attn_kvpacked_func;
           from stable_audio_3 import StableAudioModel;
           from muscriptor import TranscriptionModel;
+          from vibeseq_inference.cuda_service import CudaModelManager;
           from vibeseq_inference.muscriptor_cuda_worker import main as muscriptor_worker_main;
           from vibeseq_inference.stable_audio_cuda_worker import main as worker_main;
           assert torch.__version__ == '2.7.1+cu126'; assert torch.version.cuda == '12.6';
           assert flash_attn.__version__.startswith('2.8.3'); assert callable(flash_attn_func);
           assert callable(flash_attn_kvpacked_func); assert callable(StableAudioModel.from_pretrained);
-          assert callable(TranscriptionModel.load_model); assert callable(muscriptor_worker_main);
+          assert callable(TranscriptionModel.load_model); assert callable(CudaModelManager.generate);
+          assert callable(muscriptor_worker_main);
           assert callable(worker_main)"
       - run: npm ci
       - run: npm run check
@@ -157,7 +159,7 @@ jobs:
 
           MuScriptor remains gated and is not redistributed. Each user accepts its Hugging Face conditions, downloads the pinned `config.json` and `model.safetensors` in their browser, and places them directly under **SAVE CACHE UNDER**. That exact revision folder opens in Finder, File Explorer, or the Linux file manager. VibeSeq does not download, select, or move these files or request or store a Hugging Face token; **Verify files in cache** only validates the files already in that folder.
 
-          MuScriptor uses the same model files on CPU and GPU. On Windows with an NVIDIA GPU, VibeSeq runs MuScriptor in the managed CUDA PyTorch runtime instead of the frozen CPU sidecar; FlashAttention 2 remains specific to the Stable Audio route. CUDA workers run without opening console windows during generation or transcription.
+          Stable Audio and MuScriptor share one persistent managed CUDA service on Windows. Stable Audio is loaded once and retains VRAM priority across generations; MuScriptor remains GPU-resident only when measured VRAM headroom allows it and otherwise stays on CPU without evicting Stable Audio. CUDA generation uses the official 8-step schedule and exact requested latent duration instead of generating an extra six seconds. FlashAttention 2 remains specific to Stable Audio, and the service never opens a console window.
 
           Powered by Stability AI.
 

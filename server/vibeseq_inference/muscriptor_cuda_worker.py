@@ -42,6 +42,50 @@ def _cached_file(filename: str) -> str:
     return cached
 
 
+def muscriptor_weights_cached() -> bool:
+    try:
+        _cached_file("config.json")
+        _cached_file("model.safetensors")
+    except RuntimeError:
+        return False
+    return True
+
+
+def load_muscriptor_model(*, device: str, progress):
+    import torch
+    from muscriptor import TranscriptionModel
+
+    if torch.version.cuda != "12.6" or not torch.cuda.is_available():
+        raise RuntimeError("The pinned PyTorch CUDA 12.6 runtime is unavailable.")
+    _cached_file("config.json")
+    weights_path = _cached_file("model.safetensors")
+    progress(0.08)
+    return TranscriptionModel.load_model(weights_path, device=device)
+
+
+def transcribe_with_model(
+    model,
+    *,
+    input_path: Path,
+    output_path: Path,
+    progress,
+):
+    prepared_audio, original_duration_seconds = _prepare_audio_with_zero_preroll(
+        input_path
+    )
+    progress(0.2)
+    notes = _transcribe_loaded_model(
+        model,
+        prepared_audio,
+        original_duration_seconds,
+        output_path,
+        progress,
+        lambda: False,
+    )
+    progress(0.98)
+    return notes
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
@@ -50,33 +94,20 @@ def main() -> None:
     parser.add_argument("--metadata", type=Path, required=True)
     args = parser.parse_args()
 
-    import torch
-    from muscriptor import TranscriptionModel
-
-    if torch.version.cuda != "12.6" or not torch.cuda.is_available():
-        raise RuntimeError("The pinned PyTorch CUDA 12.6 runtime is unavailable.")
-    _cached_file("config.json")
-    weights_path = _cached_file("model.safetensors")
-
-    _write_progress(args.progress, 0.08)
-    prepared_audio, original_duration_seconds = _prepare_audio_with_zero_preroll(
-        args.input
+    model = load_muscriptor_model(
+        device="cuda",
+        progress=lambda value: _write_progress(args.progress, value),
     )
-    model = TranscriptionModel.load_model(weights_path, device="cuda")
-    _write_progress(args.progress, 0.2)
-    notes = _transcribe_loaded_model(
+    notes = transcribe_with_model(
         model,
-        prepared_audio,
-        original_duration_seconds,
-        args.out,
-        lambda value: _write_progress(args.progress, value),
-        lambda: False,
+        input_path=args.input,
+        output_path=args.out,
+        progress=lambda value: _write_progress(args.progress, value),
     )
     _write_json(
         args.metadata,
         {"notes": [note.model_dump(by_alias=True) for note in notes]},
     )
-    _write_progress(args.progress, 0.98)
 
 
 if __name__ == "__main__":
