@@ -143,6 +143,8 @@ safetensors==0.8.0
     #   muscriptor
     #   stable-audio-3
     #   transformers
+sentencepiece==0.2.2
+    # via vibeseq-inference
 setuptools==83.0.0
     # via
     #   pyinstaller
