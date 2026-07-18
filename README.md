@@ -7,7 +7,7 @@ VibeSeq is an AI-assisted, local-first WebDAW built around one continuous loop:
 ## Download and run
 
 Download the ready-to-run desktop app from the
-[VibeSeq v0.1.0-alpha.8 GitHub Release](https://github.com/acidsound/VibeSeq/releases/tag/v0.1.0-alpha.8).
+[VibeSeq v0.1.1 GitHub Release](https://github.com/acidsound/VibeSeq/releases/tag/v0.1.1).
 Node.js, Python, and `uv` are not required.
 
 - macOS Apple Silicon: open the `.dmg`.
@@ -16,9 +16,8 @@ Node.js, Python, and `uv` are not required.
 
 The executable does not contain model weights. On first launch VibeSeq offers
 the correct Stable Audio download for the running OS after its terms are
-accepted. MuScriptor remains gated: accept its Hugging Face conditions,
-download `config.json` and `model.safetensors` into the folder shown by
-**SAVE CACHE UNDER**, then choose **Verify files in cache**.
+accepted. MuScriptor Medium uses the same one-click flow on macOS, Windows, and
+Linux after its CC BY-NC 4.0 license and upstream conditions are accepted.
 
 ![VibeSeq working prototype with generated audio, linked MuScriptor MIDI regions, and multi-note piano-roll editing](docs/vibeseq-muscriptor-workflow.png)
 
@@ -211,17 +210,17 @@ Review the upstream licenses before production or commercial use:
 - Stable Audio 3: <https://github.com/Stability-AI/stable-audio-3>
 - MuScriptor: <https://github.com/muscriptor/muscriptor>
 
-## Desktop prerelease packages
+## Desktop release packages
 
 Release tags matching `v*` build an unsigned Windows x64 assisted installer and
-unsigned Apple Silicon macOS packages through GitHub Actions. These packages
+unsigned Apple Silicon macOS and Linux packages through GitHub Actions. These packages
 embed the Studio and lightweight local inference sidecar, so the target machine
 does not need Node.js, Python, `uv`, or a separate web server.
 
 The desktop sidecar includes the real Stable Audio 3 MLX runtime, MuScriptor,
 PyTorch, and their pinned execution code, but no model weights. The Inference
-readiness panel lists the official repository, exact revision, required files,
-and the model-cache path reported by the running package.
+readiness panel installs the digest-pinned Stable Audio and MuScriptor Release
+assets into the exact model-cache path reported by the running package.
 
 - Stable Audio 3 Medium optimized:
   <https://huggingface.co/stabilityai/stable-audio-3-optimized>

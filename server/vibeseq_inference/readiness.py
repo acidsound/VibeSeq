@@ -33,7 +33,14 @@ def module_installed(module: str) -> bool:
 
             return callable(flash_attn_func) and callable(flash_attn_kvpacked_func)
         return find_spec(module) is not None
-    except (ImportError, ModuleNotFoundError, OSError, RuntimeError, ValueError, AttributeError):
+    except (
+        ImportError,
+        ModuleNotFoundError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        AttributeError,
+    ):
         return False
 
 
@@ -67,7 +74,9 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
     missing_packages = (
         ()
         if isolated_cuda_ready
-        else tuple(name for name in route.required_modules if not module_installed(name))
+        else tuple(
+            name for name in route.required_modules if not module_installed(name)
+        )
     )
     package_installed = not missing_packages
     weights_cached, missing_files = cached_files(artifact, route.required_files)
@@ -149,9 +158,7 @@ def _route_status(route: RuntimeRoute) -> dict[str, Any]:
         "requiredPackages": list(route.required_modules),
         "bootstrap": {
             "kind": (
-                "vibeseq-release"
-                if artifact.redistributed
-                else "huggingface-files"
+                "vibeseq-release" if artifact.redistributed else "huggingface-files"
             ),
             "modelId": artifact.model_id,
             "revision": artifact.model_revision,

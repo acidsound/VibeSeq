@@ -95,7 +95,7 @@ const validateVariant = (manifest, variant) => {
 
 const encodedAssetPath = (asset) => asset.split('/').map(encodeURIComponent).join('/')
 
-class StableAudioModelInstaller {
+class ReleaseModelInstaller {
   constructor({
     storageRoot,
     manifest,
@@ -103,12 +103,20 @@ class StableAudioModelInstaller {
     arch = process.arch,
     fetchImpl = globalThis.fetch,
     releaseBaseUrl,
+    modelLabel = 'Stable Audio',
+    markerFilename = MARKER_FILENAME,
+    acceptanceMessage = 'The Stable Audio and Gemma terms must be accepted before installation.',
+    markerNotice = 'Powered by Stability AI',
   }) {
     this.storageRoot = storageRoot
     this.manifest = manifest
     this.key = platformKey(platform, arch)
     this.variant = manifest.variants[this.key] || null
     this.fetch = fetchImpl
+    this.modelLabel = modelLabel
+    this.markerFilename = markerFilename
+    this.acceptanceMessage = acceptanceMessage
+    this.markerNotice = markerNotice
     this.releaseBaseUrl = (
       releaseBaseUrl
       || this.variant?.release?.baseUrl
@@ -160,8 +168,8 @@ class StableAudioModelInstaller {
   }
 
   async install({ accepted, signal, onProgress = () => {} }) {
-    if (!this.variant) throw new Error(`Stable Audio is not packaged for ${this.key}.`)
-    if (accepted !== true) throw new Error('The Stable Audio and Gemma terms must be accepted before installation.')
+    if (!this.variant) throw new Error(`${this.modelLabel} is not packaged for ${this.key}.`)
+    if (accepted !== true) throw new Error(this.acceptanceMessage)
 
     const root = snapshotDirectory(this.storageRoot, this.manifest)
     const files = variantFiles(this.manifest, this.variant)
@@ -176,7 +184,7 @@ class StableAudioModelInstaller {
     const freeBytes = await availableBytes(this.storageRoot)
     if (freeBytes !== null && freeBytes < requiredBytes) {
       throw new Error(
-        `Stable Audio needs ${requiredBytes} free bytes to finish, but only ${freeBytes} are available.`,
+        `${this.modelLabel} needs ${requiredBytes} free bytes to finish, but only ${freeBytes} are available.`,
       )
     }
     let completedBytes = 0
@@ -216,9 +224,9 @@ class StableAudioModelInstaller {
       revision: this.manifest.revision,
       platform: this.key,
       acceptedAt: new Date().toISOString(),
-      notice: 'Powered by Stability AI',
+      notice: this.markerNotice,
     }
-    const markerPath = path.join(root, MARKER_FILENAME)
+    const markerPath = path.join(root, this.markerFilename)
     const temporaryMarker = `${markerPath}.tmp`
     await fsp.writeFile(temporaryMarker, `${JSON.stringify(marker, null, 2)}\n`, 'utf8')
     await fsp.rename(temporaryMarker, markerPath)
@@ -321,8 +329,11 @@ class StableAudioModelInstaller {
   }
 }
 
+const StableAudioModelInstaller = ReleaseModelInstaller
+
 module.exports = {
   MARKER_FILENAME,
+  ReleaseModelInstaller,
   StableAudioModelInstaller,
   platformKey,
   snapshotDirectory,

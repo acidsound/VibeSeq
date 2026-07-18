@@ -1,0 +1,19 @@
+MuScriptor Medium model weights
+
+Developed by Mirelo x Kyutai.
+Pinned model revision: f32236969308476e01fd3aae67357de5feb05a2d
+Official source: https://huggingface.co/MuScriptor/muscriptor-medium/tree/f32236969308476e01fd3aae67357de5feb05a2d
+Code revision: https://github.com/muscriptor/muscriptor/tree/6c1460cc75e5f120948de7656da05b2c489e8715
+
+The model weights are redistributed without modification under Creative
+Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0):
+https://creativecommons.org/licenses/by-nc/4.0/legalcode.en
+
+The upstream model conditions also require lawful, authorized use of input
+music and model output. Users must have all necessary rights in source audio.
+The model and output are provided as-is without warranty. Users are responsible
+for compliance and for the upstream indemnification conditions recorded on the
+official model page:
+https://huggingface.co/MuScriptor/muscriptor-medium
+
+No endorsement by Mirelo, Kyutai, or the MuScriptor authors is implied.

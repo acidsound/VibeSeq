@@ -3,6 +3,17 @@ const path = require('node:path')
 
 const MAX_SAFETENSORS_HEADER_BYTES = 64 * 1024 * 1024
 
+const platformKey = (platform = process.platform, arch = process.arch) => `${platform}-${arch}`
+
+const verificationFiles = (manifest, platform = process.platform, arch = process.arch) => {
+  if (Array.isArray(manifest.files)) return manifest.files
+  const variant = manifest.variants?.[platformKey(platform, arch)]
+  if (!variant) return []
+  return variant.files
+    .filter((file) => file.kind)
+    .map((file) => ({ ...file, name: file.destination }))
+}
+
 const snapshotDirectory = (storageRoot, manifest) => path.join(
   storageRoot,
   'models',
@@ -93,9 +104,10 @@ const validateFile = async (filename, expected) => {
 }
 
 class MuscriptorCacheVerifier {
-  constructor({ storageRoot, manifest }) {
+  constructor({ storageRoot, manifest, platform = process.platform, arch = process.arch }) {
     this.storageRoot = storageRoot
     this.manifest = manifest
+    this.files = verificationFiles(manifest, platform, arch)
   }
 
   cacheDirectory() {
@@ -110,12 +122,13 @@ class MuscriptorCacheVerifier {
 
   async verify() {
     const root = this.cacheDirectory()
-    for (const expected of this.manifest.files) {
+    if (this.files.length === 0) throw new Error('MuScriptor is not packaged for this platform.')
+    for (const expected of this.files) {
       try {
         await validateFile(path.join(root, expected.name), expected)
       } catch (error) {
         if (error?.code === 'ENOENT') {
-          throw new Error(`Missing ${expected.name} in the MuScriptor cache folder. Download both required files and place them under SAVE CACHE UNDER.`)
+          throw new Error(`Missing ${expected.name} in the MuScriptor cache folder. Run the one-click MuScriptor model installation again.`)
         }
         throw error
       }
@@ -125,7 +138,7 @@ class MuscriptorCacheVerifier {
       modelId: this.manifest.modelId,
       revision: this.manifest.revision,
       cacheDirectory: root,
-      files: this.manifest.files.map((file) => file.name),
+      files: this.files.map((file) => file.name),
     }
   }
 }
@@ -135,4 +148,5 @@ module.exports = {
   snapshotDirectory,
   validateConfig,
   validateSafetensors,
+  verificationFiles,
 }

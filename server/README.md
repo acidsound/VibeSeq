@@ -107,8 +107,10 @@ sample is an observation, not a p50 or p95 distribution. The actual Colab T4
 run is deferred and no T4 execution evidence is included.
 
 Stable Audio's recorded license metadata is Stability AI Community License plus
-Gemma Terms of Use. MuScriptor Medium is CC BY-NC 4.0; commercial production use
-is blocked unless a separate commercial license is obtained.
+Gemma Terms of Use. MuScriptor Medium is redistributed unchanged through a
+digest-pinned VibeSeq Release under CC BY-NC 4.0 after the user accepts its
+upstream conditions; commercial production use remains blocked unless separate
+permission is obtained.
 
 State is stored under the platform user-data directory. Override it with
 `VIBESEQ_DATA_DIR`. Other relevant environment variables are

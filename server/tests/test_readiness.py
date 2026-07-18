@@ -42,6 +42,7 @@ def test_exact_medium_manifest_is_immutable_and_pinned() -> None:
     assert MUSCRIPTOR_MEDIUM.code_revision == (
         "6c1460cc75e5f120948de7656da05b2c489e8715"
     )
+    assert MUSCRIPTOR_MEDIUM.redistributed is True
     assert set(MODEL_MANIFEST) == {
         "stable-audio-3-medium-pytorch",
         "stable-audio-3-medium-optimized",
@@ -378,11 +379,7 @@ def test_windows_4090_uses_verified_isolated_cuda_runtime(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_digest = "a" * 64
-    runtime = (
-        tmp_path
-        / "runtimes"
-        / CUDA_RUNTIME_BUNDLE
-    )
+    runtime = tmp_path / "runtimes" / CUDA_RUNTIME_BUNDLE
     python = runtime / "venv" / "Scripts" / "python.exe"
     python.parent.mkdir(parents=True)
     python.write_bytes(b"fixture")
@@ -469,8 +466,7 @@ def test_windows_muscriptor_selects_managed_cuda_without_changing_model_files(
     (runtime / ".vibeseq-runtime.json").write_text(
         '{"bundleId":"%s","projectDigest":"%s",'
         '"cudaVerified":true,"flashAttentionVerified":true,'
-        '"muscriptorVerified":false}'
-        % (CUDA_RUNTIME_BUNDLE, project_digest),
+        '"muscriptorVerified":false}' % (CUDA_RUNTIME_BUNDLE, project_digest),
         encoding="utf-8",
     )
     monkeypatch.setenv("VIBESEQ_HOME", str(tmp_path))
@@ -483,8 +479,7 @@ def test_windows_muscriptor_selects_managed_cuda_without_changing_model_files(
     (runtime / ".vibeseq-runtime.json").write_text(
         '{"bundleId":"%s","projectDigest":"%s",'
         '"cudaVerified":true,"flashAttentionVerified":false,'
-        '"muscriptorVerified":true}'
-        % (CUDA_RUNTIME_BUNDLE, project_digest),
+        '"muscriptorVerified":true}' % (CUDA_RUNTIME_BUNDLE, project_digest),
         encoding="utf-8",
     )
     ready = transcription_capability(real_settings(tmp_path), probe=detected)
@@ -514,7 +509,7 @@ def test_t4_sdpa_is_provisional_and_disabled_by_default(
     assert status["ready"] is False
 
 
-def test_uncached_gated_muscriptor_access_is_unknown_not_assumed(
+def test_uncached_redistributed_muscriptor_uses_vibeseq_release_access(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setattr("vibeseq_inference.readiness.module_installed", lambda _: True)
@@ -529,5 +524,8 @@ def test_uncached_gated_muscriptor_access_is_unknown_not_assumed(
     assert status["model"] == "medium"
     assert status["packageInstalled"] is True
     assert status["weightsCached"] is False
-    assert status["accessGranted"] is None
+    assert status["accessGranted"] is True
+    assert status["accessEvidence"] == "vibeseq-release"
+    assert status["bootstrap"]["kind"] == "vibeseq-release"
+    assert status["bootstrap"]["requiresApproval"] is False
     assert status["ready"] is False

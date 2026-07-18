@@ -15,8 +15,10 @@ type StableAudioInstallStatus = {
   installRoot?: string
   runtimeInstalled?: boolean
   terms?: {
-    stability: string
-    gemma: string
+    stability?: string
+    gemma?: string
+    license?: string
+    conditions?: string
     source: string
   }
 }
@@ -87,6 +89,13 @@ interface Window {
       onProgress: (listener: (progress: CudaRuntimeProgress) => void) => () => void
     }
     muscriptor: {
+      status: (request?: { installRuntime?: boolean }) => Promise<StableAudioInstallStatus>
+      install: (request: {
+        accepted: boolean
+        installRuntime?: boolean
+      }) => Promise<StableAudioInstallStatus>
+      cancel: () => Promise<{ cancelled: boolean }>
+      onProgress: (listener: (progress: StableAudioInstallProgress) => void) => () => void
       verifyCache: () => Promise<MuscriptorVerifyResult>
       openCacheFolder: () => Promise<{ path: string }>
     }

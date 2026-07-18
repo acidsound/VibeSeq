@@ -4,7 +4,7 @@ const os = require('node:os')
 const path = require('node:path')
 const { test } = require('node:test')
 
-const { MuscriptorCacheVerifier, snapshotDirectory } = require('./muscriptor-importer.cjs')
+const { MuscriptorCacheVerifier, snapshotDirectory, verificationFiles } = require('./muscriptor-importer.cjs')
 
 const safetensorsFixture = () => {
   const raw = JSON.stringify({ weight: { dtype: 'F32', shape: [2], data_offsets: [0, 8] } })
@@ -48,11 +48,16 @@ test('reports a required file missing from the cache without opening a picker', 
   await assert.rejects(() => verifier.verify(), /Missing config\.json in the MuScriptor cache folder/)
 })
 
-test('shipping manifest pins the current gated revision and public metadata', () => {
+test('shipping manifest pins one release bundle for every desktop platform', () => {
   const shipping = require('./muscriptor-model-bundle.json')
   assert.equal(shipping.revision, 'f32236969308476e01fd3aae67357de5feb05a2d')
-  assert.deepEqual(shipping.files.map((file) => [file.name, file.size]), [
+  assert.equal(shipping.terms.license, 'https://creativecommons.org/licenses/by-nc/4.0/legalcode.en')
+  assert.deepEqual(verificationFiles(shipping, 'darwin', 'arm64').map((file) => [file.name, file.size]), [
     ['config.json', 126],
     ['model.safetensors', 1228144472],
   ])
+  assert.deepEqual(
+    verificationFiles(shipping, 'linux', 'x64').map((file) => [file.name, file.size]),
+    verificationFiles(shipping, 'win32', 'x64').map((file) => [file.name, file.size]),
+  )
 })

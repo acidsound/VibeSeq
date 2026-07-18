@@ -12,6 +12,7 @@ files:
   - desktop/cuda-runtime-installer.cjs
   - desktop/muscriptor-importer.cjs
   - desktop/muscriptor-model-bundle.json
+  - desktop/muscriptor-NOTICE.txt
   - desktop/port-selection.cjs
   - desktop/process-tree.cjs
   - desktop/preload.cjs

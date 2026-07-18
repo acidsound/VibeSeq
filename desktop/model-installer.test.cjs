@@ -8,6 +8,7 @@ const { after, before, test } = require('node:test')
 
 const {
   MARKER_FILENAME,
+  ReleaseModelInstaller,
   StableAudioModelInstaller,
   snapshotDirectory,
 } = require('./model-installer.cjs')
@@ -117,6 +118,26 @@ test('refuses installation when the redistributed model terms were not accepted'
   await assert.rejects(() => installer.install({ accepted: false }), /must be accepted/)
 })
 
+test('uses model-specific terms and marker metadata for another release model', async () => {
+  const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-release-model-'))
+  const installer = new ReleaseModelInstaller({
+    storageRoot,
+    manifest,
+    platform: 'darwin',
+    arch: 'arm64',
+    releaseBaseUrl: baseUrl,
+    modelLabel: 'MuScriptor',
+    markerFilename: '.vibeseq-muscriptor-install.json',
+    acceptanceMessage: 'Accept the MuScriptor terms.',
+    markerNotice: 'MuScriptor · CC BY-NC 4.0',
+  })
+  await assert.rejects(() => installer.install({ accepted: false }), /Accept the MuScriptor terms/)
+  await installer.install({ accepted: true })
+  const root = snapshotDirectory(storageRoot, manifest)
+  const marker = JSON.parse(await fs.readFile(path.join(root, '.vibeseq-muscriptor-install.json'), 'utf8'))
+  assert.equal(marker.notice, 'MuScriptor · CC BY-NC 4.0')
+})
+
 test('reports an unsupported OS without downloading another platform model', async () => {
   const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibeseq-model-platform-'))
   const installer = new StableAudioModelInstaller({ storageRoot, manifest, platform: 'freebsd', arch: 'x64' })
@@ -170,6 +191,7 @@ test('redistributed GPU model downloads from a public release without credential
 test('shipping manifest separates all OS releases and selects the expected model formats', () => {
   const shipping = require('./stable-audio-model-bundle.json')
   const gpuShipping = require('./stable-audio-gpu-model-bundle.json')
+  const muscriptorShipping = require('./muscriptor-model-bundle.json')
   const mac = shipping.variants['darwin-arm64']
   const windows = shipping.variants['win32-x64']
   const linux = shipping.variants['linux-x64']
@@ -190,4 +212,9 @@ test('shipping manifest separates all OS releases and selects the expected model
   assert.ok(windowsGpu.files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
   assert.ok(windowsGpu.files.some((file) => file.destination === 'model.safetensors'))
   assert.ok(windowsGpu.files.every((file) => !file.destination.startsWith('tflite/')))
+  const muscriptorVariants = ['darwin-arm64', 'win32-x64', 'linux-x64']
+    .map((key) => muscriptorShipping.variants[key])
+  assert.ok(muscriptorVariants.every((variant) => variant.release.tag === 'muscriptor-medium-f322369'))
+  assert.ok(muscriptorVariants.every((variant) => JSON.stringify(variant.files) === JSON.stringify(muscriptorVariants[0].files)))
+  assert.ok(muscriptorVariants[0].files.flatMap((file) => file.parts).every((part) => part.size < 2 * 1024 * 1024 * 1024))
 })

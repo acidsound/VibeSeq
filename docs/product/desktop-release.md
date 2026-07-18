@@ -1,16 +1,17 @@
 # Desktop release target
 
-Status: unsigned prerelease packaging for native Windows and Apple Silicon
-validation.
+Status: unsigned `v0.1.1` release packaging for Windows x64, Apple Silicon, and
+Linux x64.
 
 ## Artifacts
 
 A tag matching `v*` runs `.github/workflows/desktop-release.yml` and publishes a
-GitHub prerelease containing:
+GitHub release containing:
 
 - `VibeSeq-<version>-Windows-x64-Setup.exe`: assisted Windows installer.
 - `VibeSeq-<version>-macOS-arm64.dmg`: Apple Silicon disk image.
 - `VibeSeq-<version>-macOS-arm64.zip`: Apple Silicon application archive.
+- `VibeSeq-<version>-Linux-x64.AppImage`: Linux x64 application image.
 - `SHA256SUMS.txt`: release-asset checksums.
 
 The builds embed the production Studio bundle and a frozen Python inference
@@ -72,9 +73,9 @@ SHA-256 in `desktop/cuda-runtime/uv.lock`. The runtime is activated only after
 an actual FlashAttention kernel succeeds on the detected GPU. Neither route
 substitutes a smaller model.
 
-The GPU checkpoint remains gated. The user accepts access on Hugging Face and
-pastes a read token for that download; VibeSeq sends it only to Hugging Face and
-does not save it to disk or logs. The installed environment contains a copied
+The GPU checkpoint is prepared from the gated upstream revision by the release
+workflow. End users accept its terms and download digest-pinned GitHub Release
+assets without providing a Hugging Face token. The installed environment contains a copied
 VibeSeq inference package rather than an editable link to the application
 folder. Its project digest is rechecked after an app update, and its virtual
 environment paths are repaired when the installation and adjacent
@@ -102,24 +103,22 @@ after installation. The default cache roots are:
 - Windows: `VibeSeq Data/models/huggingface/hub` beside the installed
   `VibeSeq.exe`
 
-MuScriptor remains gated. Each user must sign in on its official model page,
-complete the access form, and accept the model conditions. The Inference
-readiness panel then links directly to the pinned `config.json` and
-`model.safetensors`. **SAVE CACHE UNDER** opens the exact pinned snapshot in
-Finder or File Explorer. The user places both downloaded files directly in that
-folder, then **Verify files in cache** checks their names, sizes, MuScriptor
-config, and safetensors structure. VibeSeq does not download, select, or move
-these gated files, ask for or store a Hugging Face token, redistribute the
-weights, or bypass the gate. A failed verification tells the user to check the
-two files under the displayed cache path and try again.
+MuScriptor Medium uses one universal GitHub Release bundle for macOS ARM64,
+Windows x64, and Linux x64. The Inference readiness panel requires explicit
+acceptance of CC BY-NC 4.0 and the upstream conditions, then downloads the exact
+`config.json`, `model.safetensors`, and attribution notice into the pinned
+snapshot. Every asset and final file is size- and SHA-256-verified. Windows
+NVIDIA systems install or repair the isolated MuScriptor CUDA profile in the
+same click; CPU Windows, macOS, and Linux download the same model files without
+that runtime step. End users do not need a Hugging Face account or token.
 
 The cache path shown after **SAVE CACHE UNDER** is clickable in desktop builds.
 For MuScriptor it is the exact revision snapshot; VibeSeq creates the directory
 if needed and opens it in Finder or File Explorer.
 
 The builds are unsigned. Windows SmartScreen and macOS Gatekeeper may warn until
-code-signing identities are configured. Do not describe an unsigned prerelease
-as a production installer.
+code-signing identities are configured. Do not describe the unsigned release as
+signed, notarized, or free of operating-system trust warnings.
 
 ## Local packaging
 

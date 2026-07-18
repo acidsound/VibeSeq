@@ -36,6 +36,17 @@ contextBridge.exposeInMainWorld('vibeseqDesktop', {
     },
   },
   muscriptor: {
+    status: ({ installRuntime = false } = {}) => ipcRenderer.invoke('muscriptor:status', { installRuntime }),
+    install: ({ accepted, installRuntime = false }) => ipcRenderer.invoke('muscriptor:install', {
+      accepted: accepted === true,
+      installRuntime,
+    }),
+    cancel: () => ipcRenderer.invoke('muscriptor:cancel'),
+    onProgress: (listener) => {
+      const handler = (_event, progress) => listener(progress)
+      ipcRenderer.on('muscriptor:progress', handler)
+      return () => ipcRenderer.removeListener('muscriptor:progress', handler)
+    },
     verifyCache: () => ipcRenderer.invoke('muscriptor:verify-cache'),
     openCacheFolder: () => ipcRenderer.invoke('muscriptor:open-cache'),
   },

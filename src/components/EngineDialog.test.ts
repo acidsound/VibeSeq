@@ -69,14 +69,14 @@ const blockedMuscriptorHealth = (): InferenceHealth => {
     runtime: 'pytorch-mps',
     route: 'apple-mps',
     weightsCached: false,
-    accessGranted: null,
+    accessGranted: true,
     missingFiles: ['config.json', 'model.safetensors'],
     bootstrap: {
       modelId: 'MuScriptor/muscriptor-medium',
       revision: 'f32236969308476e01fd3aae67357de5feb05a2d',
       files: ['config.json', 'model.safetensors'],
       accessUrl: 'https://huggingface.co/MuScriptor/muscriptor-medium',
-      requiresApproval: true,
+      requiresApproval: false,
     },
   }
   return health
@@ -134,6 +134,18 @@ const blockedWindowsMuscriptorCudaHealth = (): InferenceHealth => {
   return health
 }
 
+type DesktopMuscriptor = NonNullable<Window['vibeseqDesktop']>['muscriptor']
+
+const mockMuscriptor = (overrides: Partial<DesktopMuscriptor> = {}): DesktopMuscriptor => ({
+  status: vi.fn(),
+  install: vi.fn(),
+  cancel: vi.fn(),
+  onProgress: vi.fn(() => () => undefined),
+  verifyCache: vi.fn(),
+  openCacheFolder: vi.fn(),
+  ...overrides,
+})
+
 describe('EngineDialog model installation guidance', () => {
   it('shows the official source, exact file, and effective model-cache path', () => {
     render(createElement(EngineDialog, {
@@ -185,10 +197,7 @@ describe('EngineDialog model installation guidance', () => {
         cancel: vi.fn().mockResolvedValue({ cancelled: true }),
         onProgress: vi.fn(() => () => undefined),
       },
-      muscriptor: {
-        verifyCache: vi.fn().mockResolvedValue({ verified: false }),
-        openCacheFolder: vi.fn(),
-      },
+      muscriptor: mockMuscriptor(),
       modelCache: { open: vi.fn().mockResolvedValue({ path: '/Users/artist/VibeSeq Data/models/huggingface/hub' }) },
       openExternal: vi.fn().mockResolvedValue(undefined),
     }
@@ -249,7 +258,7 @@ describe('EngineDialog model installation guidance', () => {
         cancel: vi.fn().mockResolvedValue({ cancelled: true }),
         onProgress: vi.fn(() => () => undefined),
       },
-      muscriptor: { verifyCache: vi.fn(), openCacheFolder: vi.fn() },
+      muscriptor: mockMuscriptor(),
       modelCache: { open: vi.fn() },
       openExternal: vi.fn(),
     }
@@ -311,7 +320,7 @@ describe('EngineDialog model installation guidance', () => {
         cancel: vi.fn(),
         onProgress: vi.fn(() => () => undefined),
       },
-      muscriptor: { verifyCache: vi.fn(), openCacheFolder: vi.fn() },
+      muscriptor: mockMuscriptor(),
       modelCache: { open: vi.fn() },
       openExternal: vi.fn(),
     }
@@ -332,12 +341,29 @@ describe('EngineDialog model installation guidance', () => {
     expect(status).toHaveBeenCalledWith('stabilityai/stable-audio-3-medium')
   })
 
-  it('guides gated MuScriptor access and verifies both browser-downloaded files', async () => {
-    const verifyCache = vi.fn().mockResolvedValue({
-      verified: true,
-      modelId: 'MuScriptor/muscriptor-medium',
+  it('installs the shared MuScriptor release bundle after explicit CC BY-NC acceptance', async () => {
+    const status = vi.fn().mockResolvedValue({
+      supported: true,
+      platformKey: 'darwin-arm64',
+      variantLabel: 'macOS ARM64 · PyTorch MPS',
+      installed: false,
+      installedBytes: 0,
+      totalBytes: 1_228_145_602,
       revision: 'f32236969308476e01fd3aae67357de5feb05a2d',
-      files: ['config.json', 'model.safetensors'],
+      terms: {
+        license: 'https://creativecommons.org/licenses/by-nc/4.0/legalcode.en',
+        conditions: 'https://huggingface.co/MuScriptor/muscriptor-medium',
+        source: 'https://huggingface.co/MuScriptor/muscriptor-medium/tree/revision',
+      },
+    })
+    const install = vi.fn().mockResolvedValue({
+      supported: true,
+      platformKey: 'darwin-arm64',
+      variantLabel: 'macOS ARM64 · PyTorch MPS',
+      installed: true,
+      installedBytes: 1_228_145_602,
+      totalBytes: 1_228_145_602,
+      revision: 'f32236969308476e01fd3aae67357de5feb05a2d',
     })
     const openCacheFolder = vi.fn().mockResolvedValue({
       path: '/Users/artist/VibeSeq Data/models/huggingface/hub/models--MuScriptor--muscriptor-medium/snapshots/f32236969308476e01fd3aae67357de5feb05a2d',
@@ -350,7 +376,7 @@ describe('EngineDialog model installation guidance', () => {
         cancel: vi.fn(),
         onProgress: vi.fn(() => () => undefined),
       },
-      muscriptor: { verifyCache, openCacheFolder },
+      muscriptor: mockMuscriptor({ status, install, openCacheFolder }),
       modelCache: { open: vi.fn().mockResolvedValue({ path: '/Users/artist/VibeSeq Data/models/huggingface/hub' }) },
       openExternal: vi.fn().mockResolvedValue(undefined),
     }
@@ -365,27 +391,47 @@ describe('EngineDialog model installation guidance', () => {
       onClose: vi.fn(),
     }))
 
-    expect(screen.getByRole('link', { name: 'MuScriptor access form' })).not.toBeNull()
+    expect(screen.queryByRole('link', { name: 'MuScriptor access form' })).toBeNull()
     expect(screen.queryByRole('link', { name: /Open model access page/ })).toBeNull()
-    expect(screen.getByRole('link', { name: 'config.json' }).getAttribute('href')).toContain('/blob/f32236969308476e01fd3aae67357de5feb05a2d/config.json')
-    expect(screen.getByRole('link', { name: 'model.safetensors' }).getAttribute('href')).toContain('/blob/f32236969308476e01fd3aae67357de5feb05a2d/model.safetensors')
-    expect(screen.getByText(/VibeSeq does not download, select, or move MuScriptor files/)).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Open model cache folder' }).textContent).toContain('models--MuScriptor--muscriptor-medium/snapshots/f32236969308476e01fd3aae67357de5feb05a2d')
     fireEvent.click(screen.getByRole('button', { name: 'Open model cache folder' }))
     await waitFor(() => expect(openCacheFolder).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: 'Verify files in cache' }))
+    const download = await screen.findByRole('button', { name: /Download & install 1.23 GB/ })
+    expect(screen.getByRole('link', { name: 'CC BY-NC 4.0' })).not.toBeNull()
+    expect(screen.getByText(/I have all necessary rights in source audio/)).not.toBeNull()
+    expect(download.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(download)
 
-    await waitFor(() => expect(verifyCache).toHaveBeenCalledOnce())
+    await waitFor(() => expect(status).toHaveBeenCalledWith({ installRuntime: false }))
+    await waitFor(() => expect(install).toHaveBeenCalledWith({ accepted: true, installRuntime: false }))
     await waitFor(() => expect(onModelInstalled).toHaveBeenCalledOnce())
   })
 
-  it('installs the shared CUDA runtime for MuScriptor without changing model files', async () => {
+  it('installs the MuScriptor model and managed CUDA runtime with one click on NVIDIA Windows', async () => {
+    const status = vi.fn().mockResolvedValue({
+      supported: true,
+      platformKey: 'win32-x64',
+      variantLabel: 'Windows x64 · PyTorch CPU/CUDA',
+      installed: false,
+      installedBytes: 0,
+      totalBytes: 1_228_145_602,
+      revision: 'f32236969308476e01fd3aae67357de5feb05a2d',
+      terms: {
+        license: 'https://creativecommons.org/licenses/by-nc/4.0/legalcode.en',
+        conditions: 'https://huggingface.co/MuScriptor/muscriptor-medium',
+        source: 'https://huggingface.co/MuScriptor/muscriptor-medium/tree/revision',
+      },
+    })
     const install = vi.fn().mockResolvedValue({
       supported: true,
+      platformKey: 'win32-x64',
+      variantLabel: 'Windows x64 · PyTorch CPU/CUDA',
       installed: true,
-      flashAttentionInstalled: false,
-      bundleId: 'windows-cuda-runtime-fixture',
-      runtimeRoot: 'G:\\VibeSeq\\VibeSeq Data\\runtimes\\cuda',
+      installedBytes: 1_228_145_602,
+      totalBytes: 1_228_145_602,
+      revision: 'f32236969308476e01fd3aae67357de5feb05a2d',
+      runtimeInstalled: true,
     })
     const onModelInstalled = vi.fn()
     window.vibeseqDesktop = {
@@ -395,18 +441,7 @@ describe('EngineDialog model installation guidance', () => {
         cancel: vi.fn(),
         onProgress: vi.fn(() => () => undefined),
       },
-      cudaRuntime: {
-        status: vi.fn().mockResolvedValue({
-          supported: true,
-          installed: false,
-          bundleId: 'windows-cuda-runtime-fixture',
-          runtimeRoot: 'G:\\VibeSeq\\VibeSeq Data\\runtimes\\cuda',
-        }),
-        install,
-        cancel: vi.fn(),
-        onProgress: vi.fn(() => () => undefined),
-      },
-      muscriptor: { verifyCache: vi.fn(), openCacheFolder: vi.fn() },
+      muscriptor: mockMuscriptor({ status, install }),
       modelCache: { open: vi.fn() },
       openExternal: vi.fn(),
     }
@@ -423,16 +458,31 @@ describe('EngineDialog model installation guidance', () => {
 
     expect(screen.getByText('GPU')).not.toBeNull()
     expect(screen.getByText('NVIDIA GeForce RTX 4090 · CUDA · PyTorch')).not.toBeNull()
-    expect(screen.getByText(/model files and cache path do not change/)).not.toBeNull()
-    expect(screen.getAllByText('config.json')).toHaveLength(2)
-    expect(screen.getAllByText('model.safetensors')).toHaveLength(2)
-    fireEvent.click(screen.getByRole('button', { name: 'Install CUDA runtime' }))
+    expect(screen.queryByRole('button', { name: 'Install CUDA runtime' })).toBeNull()
+    const download = await screen.findByRole('button', { name: /Download & install 1.23 GB/ })
+    expect(screen.getByText(/same click also installs the isolated MuScriptor CUDA runtime/)).not.toBeNull()
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(download)
 
-    await waitFor(() => expect(install).toHaveBeenCalledOnce())
+    await waitFor(() => expect(status).toHaveBeenCalledWith({ installRuntime: true }))
+    await waitFor(() => expect(install).toHaveBeenCalledWith({ accepted: true, installRuntime: true }))
     await waitFor(() => expect(onModelInstalled).toHaveBeenCalledOnce())
   })
 
-  it('directs a failed MuScriptor verification back to SAVE CACHE UNDER', async () => {
+  it('shows a MuScriptor one-click installation failure without requiring manual cache steps', async () => {
+    const status = vi.fn().mockResolvedValue({
+      supported: true,
+      platformKey: 'darwin-arm64',
+      installed: false,
+      installedBytes: 0,
+      totalBytes: 1_228_145_602,
+      revision: 'f32236969308476e01fd3aae67357de5feb05a2d',
+      terms: {
+        license: 'https://creativecommons.org/licenses/by-nc/4.0/legalcode.en',
+        conditions: 'https://huggingface.co/MuScriptor/muscriptor-medium',
+        source: 'https://huggingface.co/MuScriptor/muscriptor-medium/tree/revision',
+      },
+    })
     window.vibeseqDesktop = {
       stableAudio: {
         status: vi.fn(),
@@ -440,10 +490,10 @@ describe('EngineDialog model installation guidance', () => {
         cancel: vi.fn(),
         onProgress: vi.fn(() => () => undefined),
       },
-      muscriptor: {
-        verifyCache: vi.fn().mockRejectedValue(new Error('internal validation detail')),
-        openCacheFolder: vi.fn(),
-      },
+      muscriptor: mockMuscriptor({
+        status,
+        install: vi.fn().mockRejectedValue(new Error('Release asset digest mismatch.')),
+      }),
       modelCache: { open: vi.fn() },
       openExternal: vi.fn(),
     }
@@ -457,10 +507,10 @@ describe('EngineDialog model installation guidance', () => {
       onClose: vi.fn(),
     }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Verify files in cache' }))
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      'Verification failed. Check that config.json and model.safetensors are directly inside SAVE CACHE UNDER, then try again.',
-    )
+    const download = await screen.findByRole('button', { name: /Download & install 1.23 GB/ })
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(download)
+    expect((await screen.findByRole('alert')).textContent).toBe('Release asset digest mismatch.')
   })
 
   it('opens the effective model cache folder from its displayed path', async () => {
@@ -472,7 +522,7 @@ describe('EngineDialog model installation guidance', () => {
         cancel: vi.fn(),
         onProgress: vi.fn(() => () => undefined),
       },
-      muscriptor: { verifyCache: vi.fn(), openCacheFolder: vi.fn() },
+      muscriptor: mockMuscriptor(),
       modelCache: { open: openModelCache },
       openExternal: vi.fn(),
     }

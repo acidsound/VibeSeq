@@ -93,7 +93,7 @@ MUSCRIPTOR_MEDIUM = ModelArtifact(
     code_revision="6c1460cc75e5f120948de7656da05b2c489e8715",
     license="CC BY-NC 4.0",
     gated=True,
-    redistributed=False,
+    redistributed=True,
     files=("config.json", "model.safetensors"),
 )
 

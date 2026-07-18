@@ -15,7 +15,7 @@ const {
 } = require('./storage-root.cjs')
 const { runDesktopStartup } = require('./startup-flow.cjs')
 const { terminateProcessTree } = require('./process-tree.cjs')
-const { StableAudioModelInstaller } = require('./model-installer.cjs')
+const { ReleaseModelInstaller, StableAudioModelInstaller } = require('./model-installer.cjs')
 const {
   CudaRuntimeInstaller,
   runtimeProjectDigest,
@@ -36,6 +36,8 @@ let sidecarLog = null
 let quitting = false
 let modelInstallController = null
 let modelInstallPromise = null
+let muscriptorInstallController = null
+let muscriptorInstallPromise = null
 let cudaRuntimeInstallController = null
 let cudaRuntimeInstallPromise = null
 let studioOrigin = null
@@ -73,6 +75,14 @@ const cudaRuntimeInstaller = new CudaRuntimeInstaller({
 const muscriptorCacheVerifier = new MuscriptorCacheVerifier({
   storageRoot,
   manifest: muscriptorManifest,
+})
+const muscriptorInstaller = new ReleaseModelInstaller({
+  storageRoot,
+  manifest: muscriptorManifest,
+  modelLabel: 'MuScriptor',
+  markerFilename: '.vibeseq-muscriptor-install.json',
+  acceptanceMessage: 'The MuScriptor CC BY-NC license and conditions of use must be accepted before installation.',
+  markerNotice: 'MuScriptor Medium · developed by Mirelo x Kyutai · CC BY-NC 4.0',
 })
 
 const updateStartup = (update) => {
@@ -192,6 +202,69 @@ ipcMain.handle('cuda-runtime:cancel', () => {
   cudaRuntimeInstallController?.abort()
   return { cancelled: Boolean(cudaRuntimeInstallController) }
 })
+ipcMain.handle('muscriptor:status', async (_event, request) => {
+  const status = await muscriptorInstaller.status()
+  if (request?.installRuntime !== true) return status
+  const runtime = await muscriptorRuntimeStatus()
+  return {
+    ...status,
+    modelInstalled: status.installed,
+    runtimeInstalled: runtime.installed,
+    installed: status.installed && runtime.installed,
+  }
+})
+ipcMain.handle('muscriptor:install', async (_event, request) => {
+  if (request?.accepted !== true) {
+    throw new Error('Accept the MuScriptor CC BY-NC license and conditions of use before downloading the model.')
+  }
+  if (muscriptorInstallPromise) return muscriptorInstallPromise
+  muscriptorInstallController = new AbortController()
+  const sendProgress = (progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('muscriptor:progress', progress)
+    }
+  }
+  muscriptorInstallPromise = (async () => {
+    if (request?.installRuntime === true) {
+      const modelStatus = await muscriptorInstaller.status()
+      await installCudaRuntime({
+        signal: muscriptorInstallController.signal,
+        profile: 'muscriptor',
+        onProgress: (detail) => {
+          appendDesktopLog(`[cuda-runtime:muscriptor] ${detail}`)
+          sendProgress({
+            phase: 'runtime',
+            asset: detail,
+            downloadedBytes: 0,
+            totalBytes: modelStatus.totalBytes,
+          })
+        },
+      })
+    }
+    const installed = await muscriptorInstaller.install({
+      accepted: true,
+      signal: muscriptorInstallController.signal,
+      onProgress: sendProgress,
+    })
+    await muscriptorCacheVerifier.verify()
+    return {
+      ...installed,
+      modelInstalled: installed.installed,
+      runtimeInstalled: request?.installRuntime === true ? true : undefined,
+    }
+  })().catch((error) => {
+    appendDesktopLog(`[muscriptor:install] failed: ${error.stack ?? error.message}`)
+    throw error
+  }).finally(() => {
+    muscriptorInstallController = null
+    muscriptorInstallPromise = null
+  })
+  return muscriptorInstallPromise
+})
+ipcMain.handle('muscriptor:cancel', () => {
+  muscriptorInstallController?.abort()
+  return { cancelled: Boolean(muscriptorInstallController) }
+})
 ipcMain.handle('muscriptor:verify-cache', () => muscriptorCacheVerifier.verify())
 ipcMain.handle('muscriptor:open-cache', async () => {
   const modelCache = await muscriptorCacheVerifier.ensureCacheDirectory()
@@ -208,7 +281,7 @@ ipcMain.handle('desktop:open-model-cache', async () => {
 })
 ipcMain.handle('desktop:open-external', async (_event, value) => {
   const url = new URL(String(value))
-  const allowedHosts = new Set(['ai.google.dev', 'github.com', 'huggingface.co', 'stability.ai'])
+  const allowedHosts = new Set(['ai.google.dev', 'creativecommons.org', 'github.com', 'huggingface.co', 'stability.ai'])
   if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname)) {
     throw new Error('VibeSeq refused to open an untrusted external URL.')
   }
