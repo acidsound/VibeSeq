@@ -59,6 +59,7 @@ class CudaServiceClient:
         log_handle = log_path.open("a", encoding="utf-8", buffering=1)
         environment = os.environ.copy()
         environment["PYTHONUNBUFFERED"] = "1"
+        environment["VIBESEQ_CUDA_PARENT_PID"] = str(os.getpid())
         process = subprocess.Popen(
             [str(python), "-u", "-m", "vibeseq_inference.cuda_service"],
             stdin=subprocess.PIPE,

@@ -4,8 +4,10 @@ const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { spawn } = require('node:child_process')
 const { unzipSync } = require('fflate')
+const { terminateProcessTree } = require('./process-tree.cjs')
 
 const CUDA_RUNTIME_BUNDLE = 'windows-cuda-fa2-py312-torch271-cu126-fa283-v1'
+const FLASH_ATTENTION_PACKAGE = 'flash-attn'
 const UV_VERSION = '0.11.1'
 const UV_URL = 'https://github.com/astral-sh/uv/releases/download/0.11.1/uv-x86_64-pc-windows-msvc.zip'
 const UV_SHA256 = '6659250cebbd3bb6ee48bcb21a3f0c6656450d63fb97f0f069bcb532bdb688ed'
@@ -63,6 +65,13 @@ const readMarker = async (filename) => {
   }
 }
 
+const isFlashAttentionCacheMetadataError = (error) => {
+  const message = String(error?.message || error).toLowerCase()
+  return message.includes(FLASH_ATTENTION_PACKAGE)
+    && message.includes('metadata')
+    && (message.includes('archive-v') || message.includes('cache'))
+}
+
 const run = ({ command, args, cwd, env, signal, onLine = () => {} }) => new Promise((resolve, reject) => {
   const child = spawn(command, args, {
     cwd,
@@ -78,7 +87,7 @@ const run = ({ command, args, cwd, env, signal, onLine = () => {} }) => new Prom
   }
   child.stdout.on('data', handle)
   child.stderr.on('data', handle)
-  const abort = () => child.kill()
+  const abort = () => terminateProcessTree(child)
   signal?.addEventListener('abort', abort, { once: true })
   child.once('error', reject)
   child.once('exit', (code) => {
@@ -189,15 +198,62 @@ class CudaRuntimeInstaller {
       UV_LINK_MODE: 'copy',
       UV_NO_PROGRESS: '1',
     }
+
+    // A cancelled or interrupted first install can leave uv's extracted direct
+    // wheel entry without its dist-info/METADATA file. Since environments use
+    // copy mode, clearing only this package cache cannot damage an installed
+    // runtime and avoids carrying the broken entry into the next attempt.
+    let useTemporaryCache = false
+    onProgress('Refreshing the pinned FlashAttention wheel cache')
+    try {
+      await this.run({
+        command: paths.uv,
+        args: ['cache', 'clean', FLASH_ATTENTION_PACKAGE],
+        cwd: this.projectRoot,
+        env: environment,
+        signal,
+        onLine: onProgress,
+      })
+    } catch {
+      useTemporaryCache = true
+      onProgress('The shared package cache is unavailable; using a temporary cache')
+    }
+
+    const syncArgs = [
+      'sync',
+      '--project',
+      this.projectRoot,
+      '--locked',
+      '--python',
+      '3.12.10',
+      '--refresh-package',
+      FLASH_ATTENTION_PACKAGE,
+      '--reinstall-package',
+      FLASH_ATTENTION_PACKAGE,
+    ]
+    if (useTemporaryCache) syncArgs.push('--no-cache')
     onProgress('Installing isolated Python and CUDA PyTorch runtime')
-    await this.run({
-      command: paths.uv,
-      args: ['sync', '--project', this.projectRoot, '--locked', '--python', '3.12.10'],
-      cwd: this.projectRoot,
-      env: environment,
-      signal,
-      onLine: onProgress,
-    })
+    try {
+      await this.run({
+        command: paths.uv,
+        args: syncArgs,
+        cwd: this.projectRoot,
+        env: environment,
+        signal,
+        onLine: onProgress,
+      })
+    } catch (error) {
+      if (useTemporaryCache || !isFlashAttentionCacheMetadataError(error)) throw error
+      onProgress('Retrying the FlashAttention wheel with an isolated temporary cache')
+      await this.run({
+        command: paths.uv,
+        args: [...syncArgs, '--no-cache'],
+        cwd: this.projectRoot,
+        env: environment,
+        signal,
+        onLine: onProgress,
+      })
+    }
 
     onProgress('Installing the release-matched VibeSeq CUDA worker')
     await this.run({

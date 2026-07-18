@@ -161,6 +161,8 @@ jobs:
 
           Stable Audio and MuScriptor share one persistent managed CUDA service on Windows. Stable Audio is loaded once and retains VRAM priority across generations; MuScriptor remains GPU-resident only when measured VRAM headroom allows it and otherwise stays on CPU without evicting Stable Audio. CUDA generation uses the official 8-step schedule and exact requested latent duration instead of generating an extra six seconds. FlashAttention 2 remains specific to Stable Audio, and the service never opens a console window.
 
+          Windows runtime installation clears and refreshes only the pinned FlashAttention wheel cache before synchronization, then automatically retries with an isolated temporary cache if interrupted installation metadata is incomplete. App shutdown terminates the complete sidecar, CUDA Python, and runtime-installer process trees; the persistent CUDA service also watches its parent process so it cannot remain orphaned and block a later Setup update.
+
           Powered by Stability AI.
 
           Windows is distributed as a current-user assisted NSIS installer so extraction progress is visible and `VibeSeq Data` remains beside the installed executable. The installed app then shows Local data, Audio engine, Health check, and Studio startup stages while its local service starts. Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. On Linux, run `chmod +x VibeSeq-*.AppImage` before launching. Verify the downloaded asset with `SHA256SUMS.txt` before running it.

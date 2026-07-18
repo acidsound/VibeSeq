@@ -3,7 +3,9 @@ from __future__ import annotations
 import contextlib
 import gc
 import json
+import os
 import sys
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -21,6 +23,50 @@ from .stable_audio_cuda_worker import generate_with_model, load_stable_audio_mod
 GIB = 1024**3
 MUSCRIPTOR_GPU_MIN_FREE_BYTES = 8 * GIB
 FAST_STABLE_DECODE_MIN_FREE_BYTES = 8 * GIB
+
+
+def _wait_for_windows_parent(parent_pid: int) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    synchronize = 0x00100000
+    infinite = 0xFFFFFFFF
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    handle = kernel32.OpenProcess(synchronize, False, parent_pid)
+    if not handle:
+        os._exit(0)
+    try:
+        kernel32.WaitForSingleObject(handle, infinite)
+    finally:
+        kernel32.CloseHandle(handle)
+    # The frozen API sidecar was terminated, so release CUDA, DLL, and runtime
+    # file handles even when it could not execute Python atexit handlers.
+    os._exit(0)
+
+
+def _start_parent_watchdog() -> threading.Thread | None:
+    if os.name != "nt":
+        return None
+    try:
+        parent_pid = int(os.getenv("VIBESEQ_CUDA_PARENT_PID", ""))
+    except ValueError:
+        return None
+    if parent_pid <= 0:
+        return None
+    watcher = threading.Thread(
+        target=_wait_for_windows_parent,
+        args=(parent_pid,),
+        name="vibeseq-cuda-parent-watchdog",
+        daemon=True,
+    )
+    watcher.start()
+    return watcher
 
 
 class CudaModelManager:
@@ -219,6 +265,7 @@ def _send(stream, value: dict[str, Any]) -> None:
 
 
 def main() -> None:
+    _start_parent_watchdog()
     protocol_out = sys.stdout
     manager = CudaModelManager()
     for line in sys.stdin:

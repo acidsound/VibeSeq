@@ -14,6 +14,7 @@ const {
   sidecarStorageEnvironment,
 } = require('./storage-root.cjs')
 const { runDesktopStartup } = require('./startup-flow.cjs')
+const { terminateProcessTree } = require('./process-tree.cjs')
 const { StableAudioModelInstaller } = require('./model-installer.cjs')
 const {
   CudaRuntimeInstaller,
@@ -227,8 +228,8 @@ const activeWindow = () => {
 }
 
 const stopSidecar = () => {
-  if (!sidecar || sidecar.killed) return
-  sidecar.kill()
+  if (!sidecar) return
+  terminateProcessTree(sidecar)
   sidecar = null
 }
 
@@ -553,6 +554,7 @@ app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => {
   quitting = true
   modelInstallController?.abort()
+  cudaRuntimeInstallController?.abort()
   stopSidecar()
   sidecarLog?.end()
 })

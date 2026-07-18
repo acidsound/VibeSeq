@@ -13,6 +13,7 @@ files:
   - desktop/muscriptor-importer.cjs
   - desktop/muscriptor-model-bundle.json
   - desktop/port-selection.cjs
+  - desktop/process-tree.cjs
   - desktop/preload.cjs
   - desktop/startup-flow.cjs
   - desktop/startup-renderer.js
