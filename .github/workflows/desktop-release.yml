@@ -53,7 +53,7 @@ jobs:
         shell: pwsh
         run: |
           uv sync --project desktop/cuda-runtime --locked --python 3.12.10
-          uv pip install --python desktop/cuda-runtime/.venv/Scripts/python.exe --no-deps --no-build-isolation --reinstall server
+          uv pip install --python desktop/cuda-runtime/.venv/Scripts/python.exe --no-deps --no-build-isolation --reinstall ./server
       - if: runner.os == 'Windows'
         name: Verify pinned CUDA and FlashAttention imports
         run: >-
