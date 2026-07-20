@@ -1,6 +1,6 @@
 {
   "name": "vibeseq",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local-first AI-assisted WebDAW for audio generation, transcription, editing, and arrangement",
   "author": "VibeSeq contributors",
   "private": true,
@@ -39,7 +39,8 @@
     "fflate": "^0.8.3",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "signalsmith-stretch": "^1.3.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

@@ -13,6 +13,9 @@ import {
   type WebAudioPlaybackEngineOptions,
 } from './playback';
 import {
+  combineRecordingChunks,
+} from './inputRecording';
+import {
   createWorkletProjectSnapshot,
   MAX_MIDI_AUDITION_SECONDS,
   MIN_MIDI_AUDITION_SECONDS,
@@ -23,6 +26,8 @@ import {
   type WorkletCommand,
   type WorkletEvent,
   type WorkletProjectSnapshot,
+  type WorkletRecordingResult,
+  type WorkletRecordingStart,
   type WorkletTrackParameterPatch,
 } from './workletProtocol';
 
@@ -86,6 +91,26 @@ export interface CreatePlaybackEngineOptions extends AudioWorkletPlaybackEngineO
   backend?: PlaybackBackend;
 }
 
+export interface RecordingLatencyEstimate {
+  baseLatencySeconds: number;
+  outputLatencySeconds: number;
+  inputLatencySeconds: number;
+  totalSeconds: number;
+}
+
+type ActiveInputRecording = {
+  sessionId: string;
+  sourceNode: MediaStreamAudioSourceNode;
+  chunks: Float32Array[][];
+  started: Promise<WorkletRecordingStart>;
+  resolveStarted: (start: WorkletRecordingStart) => void;
+  rejectStarted: (error: Error) => void;
+  completed: Promise<WorkletRecordingResult>;
+  resolveCompleted: (result: WorkletRecordingResult) => void;
+  rejectCompleted: (error: Error) => void;
+  start?: WorkletRecordingStart;
+};
+
 type BrowserAudioGlobals = typeof globalThis & {
   AudioContext?: typeof AudioContext;
   webkitAudioContext?: typeof AudioContext;
@@ -148,6 +173,8 @@ export class AudioWorkletPlaybackEngine {
   private auditionEpoch = 0;
   private auditionToken = 0;
   private midiAuditionToken = 0;
+  private recordingSequence = 0;
+  private inputRecording?: ActiveInputRecording;
   private auditionEnded?: () => void;
   private activeAudition?: { assetId: string; token: number; ephemeral: boolean };
   private contextStateListener?: () => void;
@@ -246,6 +273,21 @@ export class AudioWorkletPlaybackEngine {
 
   getState(): PlaybackState { return this.state; }
 
+  isInputRecording(): boolean { return Boolean(this.inputRecording); }
+
+  getRecordingLatencyEstimate(inputLatencySeconds = 0): RecordingLatencyEstimate {
+    const context = this.context;
+    const baseLatencySeconds = context && Number.isFinite(context.baseLatency) ? Math.max(0, context.baseLatency) : 0;
+    const outputLatencySeconds = context && Number.isFinite(context.outputLatency) ? Math.max(0, context.outputLatency) : 0;
+    const normalizedInputLatency = Number.isFinite(inputLatencySeconds) ? Math.max(0, inputLatencySeconds) : 0;
+    return {
+      baseLatencySeconds,
+      outputLatencySeconds,
+      inputLatencySeconds: normalizedInputLatency,
+      totalSeconds: baseLatencySeconds + outputLatencySeconds + normalizedInputLatency,
+    };
+  }
+
   /** Reports the engine-owned PCM cache, not merely UI-side decode metadata. */
   hasAudioBuffer(assetId: string): boolean {
     return this.buffers.has(assetId);
@@ -329,6 +371,69 @@ export class AudioWorkletPlaybackEngine {
     const buffer = await this.decodeAudioMedia(media);
     this.registerAudioBuffer(assetId, buffer);
     return buffer;
+  }
+
+  async startInputRecording(stream: MediaStream, channelCount = 1): Promise<WorkletRecordingStart> {
+    this.assertNotDisposed();
+    if (this.inputRecording) throw new Error('An audio input recording is already active');
+    if (!stream.getAudioTracks().some((track) => track.readyState === 'live')) {
+      throw new Error('Recording requires a live audio input track');
+    }
+    await this.initialize();
+    await this.resumeContext();
+    const context = this.context;
+    const node = this.node;
+    if (!context || !node) throw new AudioWorkletEngineError('unsupported', 'Audio input recording requires an initialized AudioWorklet');
+    const sourceNode = context.createMediaStreamSource(stream);
+    sourceNode.connect(node);
+    const sessionId = `input-recording-${++this.recordingSequence}`;
+    let resolveStarted!: (start: WorkletRecordingStart) => void;
+    let rejectStarted!: (error: Error) => void;
+    let resolveCompleted!: (result: WorkletRecordingResult) => void;
+    let rejectCompleted!: (error: Error) => void;
+    const started = new Promise<WorkletRecordingStart>((resolve, reject) => {
+      resolveStarted = resolve;
+      rejectStarted = reject;
+    });
+    const completed = new Promise<WorkletRecordingResult>((resolve, reject) => {
+      resolveCompleted = resolve;
+      rejectCompleted = reject;
+    });
+    // A completion rejection can precede the caller's stop request (processor
+    // crash/device removal). Attach a handler now so the browser never reports
+    // an unhandled promise while start is still pending.
+    void completed.catch(() => undefined);
+    this.inputRecording = {
+      sessionId,
+      sourceNode,
+      chunks: [],
+      started,
+      resolveStarted,
+      rejectStarted,
+      completed,
+      resolveCompleted,
+      rejectCompleted,
+    };
+    this.post({
+      type: 'start-recording',
+      sessionId,
+      channelCount: Math.max(1, Math.min(2, Math.round(channelCount))),
+    });
+    return started;
+  }
+
+  async stopInputRecording(): Promise<WorkletRecordingResult> {
+    const active = this.inputRecording;
+    if (!active) throw new Error('No audio input recording is active');
+    this.post({ type: 'stop-recording', sessionId: active.sessionId });
+    return active.completed;
+  }
+
+  cancelInputRecording(): void {
+    const active = this.inputRecording;
+    if (!active) return;
+    this.post({ type: 'cancel-recording', sessionId: active.sessionId });
+    this.rejectInputRecording(new DOMException('Audio input recording was cancelled', 'AbortError'));
   }
 
   async audition(assetId: string, media?: Blob | ArrayBuffer, onEnded?: () => void): Promise<void> {
@@ -501,6 +606,10 @@ export class AudioWorkletPlaybackEngine {
     this.midiAuditionToken += 1;
     this.auditionEnded = undefined;
     this.activeAudition = undefined;
+    if (this.inputRecording) {
+      this.post({ type: 'cancel-recording', sessionId: this.inputRecording.sessionId });
+      this.rejectInputRecording(new Error('Audio engine disposed during input recording'));
+    }
     this.post({ type: 'dispose' });
     this.detachNode();
     this.detachContextListener();
@@ -554,11 +663,11 @@ export class AudioWorkletPlaybackEngine {
     try {
       const factory = this.options.nodeFactory ?? this.nativeNodeFactory();
       node = factory(context, VIBESEQ_AUDIO_PROCESSOR_NAME, {
-        numberOfInputs: 0,
+        numberOfInputs: 1,
         numberOfOutputs: 1,
         outputChannelCount: [2],
         channelCount: 2,
-        channelCountMode: 'explicit',
+        channelCountMode: 'max',
       });
     } catch (error) {
       throw new AudioWorkletEngineError(
@@ -703,6 +812,42 @@ export class AudioWorkletPlaybackEngine {
   }
 
   private handleEvent(event: WorkletEvent): void {
+    if (event.type === 'recording-started') {
+      const active = this.inputRecording;
+      if (!active || event.sessionId !== active.sessionId) return;
+      active.start = event;
+      active.resolveStarted(event);
+      return;
+    }
+    if (event.type === 'recording-chunk') {
+      const active = this.inputRecording;
+      if (!active || event.sessionId !== active.sessionId) return;
+      active.chunks.push(event.channelData);
+      return;
+    }
+    if (event.type === 'recording-complete') {
+      const active = this.inputRecording;
+      if (!active || event.sessionId !== active.sessionId) return;
+      try {
+        if (!active.start) throw new Error('Recording completed before its start frame was acknowledged');
+        active.resolveCompleted(combineRecordingChunks(
+          active.start,
+          active.chunks,
+          event.endFrame,
+          event.frameCount,
+        ));
+        this.releaseInputRecording();
+      } catch (error) {
+        this.rejectInputRecording(error instanceof Error ? error : new Error(String(error)));
+      }
+      return;
+    }
+    if (event.type === 'recording-cancelled') {
+      const active = this.inputRecording;
+      if (!active || event.sessionId !== active.sessionId) return;
+      this.rejectInputRecording(new DOMException('Audio input recording was cancelled', 'AbortError'));
+      return;
+    }
     if (event.type === 'telemetry') {
       this.positionBeat = event.positionBeat;
       this.telemetryContextTime = this.context?.currentTime ?? 0;
@@ -736,6 +881,9 @@ export class AudioWorkletPlaybackEngine {
       return;
     }
     if (event.type === 'midi-audition-ended') return;
+    if (event.code === 'recording-command' && this.inputRecording) {
+      this.rejectInputRecording(new AudioWorkletEngineError('processor-error', event.message));
+    }
     this.reportError(new AudioWorkletEngineError('processor-error', event.message));
   }
 
@@ -744,6 +892,13 @@ export class AudioWorkletPlaybackEngine {
     this.auditionToken += 1;
     this.auditionEnded = undefined;
     this.activeAudition = undefined;
+    if (this.inputRecording) {
+      this.rejectInputRecording(new AudioWorkletEngineError(
+        'processor-crashed',
+        'The AudioWorkletProcessor crashed during input recording',
+        { cause: event },
+      ));
+    }
     this.nodeFaulted = true;
     this.positionBeat = this.getPositionBeat();
     this.telemetryContextTime = this.context?.currentTime ?? 0;
@@ -786,6 +941,21 @@ export class AudioWorkletPlaybackEngine {
     node.port.onmessage = null;
     node.port.close();
     node.disconnect();
+  }
+
+  private releaseInputRecording(): void {
+    const active = this.inputRecording;
+    this.inputRecording = undefined;
+    if (!active) return;
+    try { active.sourceNode.disconnect(); } catch { /* The input node may already be detached. */ }
+  }
+
+  private rejectInputRecording(error: Error): void {
+    const active = this.inputRecording;
+    if (!active) return;
+    active.rejectStarted(error);
+    active.rejectCompleted(error);
+    this.releaseInputRecording();
   }
 
   private releaseActiveAudition(stopProcessor: boolean): void {

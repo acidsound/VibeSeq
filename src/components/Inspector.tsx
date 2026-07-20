@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   ArrowRight,
   AudioLines,
@@ -10,6 +11,7 @@ import {
   Repeat2,
   Scissors,
   Sparkles,
+  SlidersHorizontal,
   Unlink2,
   VolumeX,
   WandSparkles,
@@ -39,6 +41,7 @@ type InspectorProps = {
   tempoAnalyzing?: boolean
   tempoAnalysis?: TempoAnalysisResult | null
   tempoAnalysisError?: string | null
+  audioTransforming?: boolean
   linkedRegion?: InspectorLinkedRegion
   onGain: (gain: number) => void
   onTrackGain: (gain: number) => void
@@ -49,6 +52,7 @@ type InspectorProps = {
   onDeleteTrack: () => void
   onRenameRegion: (name: string) => void
   onFade: (edge: 'fadeIn' | 'fadeOut', value: number) => void
+  onAudioTransform: (pitchSemitones: number, stretchRatio: number) => void
   onToggleClipMute: () => void
   onToggleSourceLoop: () => void
   onExtract: () => void
@@ -74,6 +78,7 @@ export function Inspector({
   tempoAnalyzing,
   tempoAnalysis,
   tempoAnalysisError,
+  audioTransforming,
   linkedRegion,
   onGain,
   onTrackGain,
@@ -84,6 +89,7 @@ export function Inspector({
   onDeleteTrack,
   onRenameRegion,
   onFade,
+  onAudioTransform,
   onToggleClipMute,
   onToggleSourceLoop,
   onExtract,
@@ -97,6 +103,15 @@ export function Inspector({
   onDelete,
   onClose,
 }: InspectorProps) {
+  const appliedPitch = clip?.kind === 'audio' ? clip.transform?.pitchSemitones ?? 0 : 0
+  const appliedStretch = clip?.kind === 'audio' ? clip.transform?.stretchRatio ?? 1 : 1
+  const [pitchDraft, setPitchDraft] = useState(appliedPitch)
+  const [stretchDraft, setStretchDraft] = useState(appliedStretch)
+  useEffect(() => {
+    setPitchDraft(appliedPitch)
+    setStretchDraft(appliedStretch)
+  }, [appliedPitch, appliedStretch, clip?.id])
+
   if (!track) {
     return (
       <aside className={`inspector-panel panel ${open ? 'is-open' : ''}`} aria-label="Inspector">
@@ -119,10 +134,14 @@ export function Inspector({
   const returnedNoteCount = clip.provenance.metadata?.returnedNoteCount
   const committedNoteCount = clip.provenance.metadata?.committedNoteCount
   const droppedOutOfBoundsNoteCount = clip.provenance.metadata?.droppedOutOfBoundsNoteCount
+  const recordingLatencyCompensationMs = clip.provenance.metadata?.latencyCompensationMs
+  const unfoldedLoopPasses = clip.provenance.metadata?.unfoldedLoopPasses
   const audioPlaybackRate = clip.kind === 'audio' ? bpm / clip.timebase.sourceBpm : 1
   const hasReusablePrompt = isAudio && Boolean(clip.provenance.prompt?.trim())
   const parentClipId = clip.provenance.parentClipId
   const linkedRegionAvailable = Boolean(parentClipId && linkedRegion && onOpenLinkedRegion)
+  const transformChanged = Math.abs(pitchDraft - appliedPitch) > 1e-9
+    || Math.abs(stretchDraft - appliedStretch) > 1e-9
   const openLinkedRegion = () => {
     if (!linkedRegion || !onOpenLinkedRegion) return
     onOpenLinkedRegion(linkedRegion.clipId, linkedRegion.trackId)
@@ -152,7 +171,7 @@ export function Inspector({
         </button>
         <button className={`inspector-toggle-action ${clip.sourceLoop ? 'is-active' : ''}`} aria-pressed={Boolean(clip.sourceLoop)} onClick={onToggleSourceLoop}>
           <Repeat2 />
-          <span><b>Clip loop</b><small>{clip.sourceLoop ? `${clip.sourceLoop.cycleLengthBeats.toFixed(2)}-beat source cycle` : 'Repeat this source independently of project cycle'}</small></span>
+          <span><b>Clip loop</b><small>{clip.sourceLoop ? `${(clip.sourceLoop.cycleLengthBeats * (clip.kind === 'audio' ? clip.transform?.stretchRatio ?? 1 : 1)).toFixed(2)}-beat audible cycle` : 'Repeat this source independently of project cycle'}</small></span>
           <strong>{clip.sourceLoop ? 'ON' : 'OFF'}</strong>
         </button>
         <label className="parameter-row"><span>Gain</span><input type="range" min="0" max="1.5" step="0.01" value={clip.gain} aria-valuetext={`${(20 * Math.log10(Math.max(0.001, clip.gain))).toFixed(1)} decibels`} onChange={(event) => onGain(Number(event.target.value))} /><output>{(20 * Math.log10(Math.max(0.001, clip.gain))).toFixed(1)} dB</output></label>
@@ -170,9 +189,22 @@ export function Inspector({
               <b>{clip.timebase.mode === 'fixed-seconds' ? 'Fixed seconds' : 'Follow tempo · repitch'}</b>
               <small>{clip.timebase.mode === 'fixed-seconds'
                 ? 'Source stays at 1× while beat width follows project tempo'
-                : `Authored at ${clip.timebase.sourceBpm.toFixed(1)} BPM · pitch-preserving stretch is not applied`}</small>
+                : `Authored at ${clip.timebase.sourceBpm.toFixed(1)} BPM · tempo follow remains varispeed`}</small>
             </span>
             <strong>{audioPlaybackRate.toFixed(2)}×</strong>
+          </div>
+          <div className="audio-transform" aria-label="Independent audio pitch and stretch">
+            <div className="audio-transform-heading">
+              <SlidersHorizontal />
+              <span><b>Pitch &amp; stretch</b><small>Signalsmith render · original asset stays immutable</small></span>
+            </div>
+            <label className="parameter-row"><span>Pitch</span><input type="range" min="-12" max="12" step="1" value={pitchDraft} disabled={audioTransforming} aria-valuetext={`${pitchDraft > 0 ? 'plus ' : ''}${pitchDraft} semitones`} onChange={(event) => setPitchDraft(Number(event.target.value))} /><output>{pitchDraft > 0 ? '+' : ''}{pitchDraft} st</output></label>
+            <label className="parameter-row"><span>Stretch</span><input type="range" min="0.125" max="2" step="0.025" value={stretchDraft} disabled={audioTransforming} aria-valuetext={`${stretchDraft.toFixed(3)} times output duration`} onChange={(event) => setStretchDraft(Number(event.target.value))} /><output>{stretchDraft.toFixed(stretchDraft < 1 ? 3 : 2)}×</output></label>
+            <div className="action-grid audio-transform-actions">
+              <button type="button" disabled={!transformChanged || audioTransforming} onClick={() => onAudioTransform(pitchDraft, stretchDraft)}>{audioTransforming ? 'Rendering…' : 'Apply to clip'}</button>
+              <button type="button" disabled={audioTransforming || (appliedPitch === 0 && appliedStretch === 1)} onClick={() => onAudioTransform(0, 1)}>Reset</button>
+            </div>
+            <p>Stretch changes the region length. Extreme values may produce audible artifacts.</p>
           </div>
           <div className="tempo-analysis" aria-label="Audio tempo detection">
             <button type="button" className="tempo-analysis-trigger" onClick={tempoAnalyzing ? onCancelTempoAnalysis : onAnalyzeTempo}>
@@ -204,6 +236,8 @@ export function Inspector({
         <dl>
           <div><dt>Source</dt><dd>{clip.provenance.source}</dd></div>
           {clip.provenance.model && <div><dt>Model</dt><dd>{clip.provenance.model}</dd></div>}
+          {typeof recordingLatencyCompensationMs === 'number' && <div><dt>Record compensation</dt><dd>{recordingLatencyCompensationMs.toFixed(1)} ms</dd></div>}
+          {typeof unfoldedLoopPasses === 'number' && unfoldedLoopPasses > 1 && <div><dt>Loop take</dt><dd>{unfoldedLoopPasses} passes · unfolded</dd></div>}
           {clip.provenance.prompt && <div className="prompt-provenance">
             <dt className="prompt-provenance-label">
               <span>Prompt</span>

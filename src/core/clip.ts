@@ -62,16 +62,25 @@ export const normalizeSourceLoop = (loop: ClipSourceLoop): ClipSourceLoop => {
   };
 };
 
+type TransformableSourceMapping = Partial<Pick<Extract<Clip, { kind: 'audio' }>, 'transform'>>;
+
+const clipStretchRatio = (clip: Pick<Clip, 'offsetBeats'> & TransformableSourceMapping): number =>
+  clip.transform?.stretchRatio ?? 1;
+
 /** Source beat heard at one position relative to the arrangement clip's left edge. */
 export const sourceBeatAtClipPosition = (
-  clip: Pick<Clip, 'offsetBeats' | 'sourceLoop'>,
+  clip: Pick<Clip, 'offsetBeats' | 'sourceLoop'> & TransformableSourceMapping,
   placementPositionBeat: number,
 ): number => {
   if (!Number.isFinite(placementPositionBeat)) throw new RangeError('Clip position must be finite');
-  if (!clip.sourceLoop) return clip.offsetBeats + placementPositionBeat;
+  const stretchRatio = clipStretchRatio(clip);
+  const sourcePositionBeat = placementPositionBeat / stretchRatio;
+  if (!clip.sourceLoop) return (clip.offsetBeats + sourcePositionBeat) * stretchRatio;
   const loop = normalizeSourceLoop(clip.sourceLoop);
-  return loop.cycleStartBeat
-    + positiveModulo(loop.phaseBeats + placementPositionBeat, loop.cycleLengthBeats);
+  return (
+    loop.cycleStartBeat
+    + positiveModulo(loop.phaseBeats + sourcePositionBeat, loop.cycleLengthBeats)
+  ) * stretchRatio;
 };
 
 /**
@@ -79,7 +88,7 @@ export const sourceBeatAtClipPosition = (
  * explicit slices so WebAudio can schedule the same source mapping as CPU export.
  */
 export function getClipSourceSlices(
-  clip: Pick<Clip, 'durationBeats' | 'offsetBeats' | 'sourceLoop'>,
+  clip: Pick<Clip, 'durationBeats' | 'offsetBeats' | 'sourceLoop'> & TransformableSourceMapping,
   fromPlacementBeat = 0,
   toPlacementBeat = clip.durationBeats,
 ): ClipSourceSlice[] {
@@ -89,11 +98,12 @@ export function getClipSourceSlices(
   const from = Math.max(0, Math.min(clip.durationBeats, fromPlacementBeat));
   const to = Math.max(from, Math.min(clip.durationBeats, toPlacementBeat));
   if (to - from <= LOOP_EPSILON) return [];
+  const stretchRatio = clipStretchRatio(clip);
   if (!clip.sourceLoop) {
     return [{
       placementStartBeat: from,
       durationBeats: to - from,
-      sourceStartBeat: clip.offsetBeats + from,
+      sourceStartBeat: (clip.offsetBeats + from / stretchRatio) * stretchRatio,
     }];
   }
 
@@ -104,8 +114,9 @@ export function getClipSourceSlices(
     if (slices.length >= MAX_SOURCE_SLICES) {
       throw new RangeError('Source-loop expansion exceeds the safe slice limit');
     }
-    const phase = positiveModulo(loop.phaseBeats + placement, loop.cycleLengthBeats);
-    const untilCycleEnd = loop.cycleLengthBeats - phase;
+    const sourcePlacement = placement / stretchRatio;
+    const phase = positiveModulo(loop.phaseBeats + sourcePlacement, loop.cycleLengthBeats);
+    const untilCycleEnd = (loop.cycleLengthBeats - phase) * stretchRatio;
     const durationBeats = Math.min(to - placement, untilCycleEnd);
     if (durationBeats <= LOOP_EPSILON) {
       placement += Math.min(to - placement, LOOP_EPSILON);
@@ -114,7 +125,7 @@ export function getClipSourceSlices(
     slices.push({
       placementStartBeat: placement,
       durationBeats,
-      sourceStartBeat: loop.cycleStartBeat + phase,
+      sourceStartBeat: (loop.cycleStartBeat + phase) * stretchRatio,
     });
     placement += durationBeats;
   }
@@ -179,10 +190,11 @@ export function trimClipStart<T extends Clip>(clip: T, startBeat: number): T {
   const next = structuredClone(clip);
   next.startBeat = startBeat;
   next.durationBeats = oldEnd - startBeat;
-  next.offsetBeats += delta;
+  const sourceDelta = delta / clipStretchRatio(next);
+  next.offsetBeats += sourceDelta;
   if (next.sourceLoop) {
     next.sourceLoop.phaseBeats = positiveModulo(
-      next.sourceLoop.phaseBeats + delta,
+      next.sourceLoop.phaseBeats + sourceDelta,
       next.sourceLoop.cycleLengthBeats,
     );
   }
@@ -282,11 +294,12 @@ export function splitClipAtBeat<T extends Clip>(
   right.id = rightId;
   right.startBeat = atBeat;
   right.durationBeats = clipEnd - atBeat;
-  right.offsetBeats += localSplit;
+  const sourceDelta = localSplit / clipStretchRatio(right);
+  right.offsetBeats += sourceDelta;
   right.fadeIn = 0;
   if (right.sourceLoop) {
     right.sourceLoop.phaseBeats = positiveModulo(
-      right.sourceLoop.phaseBeats + localSplit,
+      right.sourceLoop.phaseBeats + sourceDelta,
       right.sourceLoop.cycleLengthBeats,
     );
   }

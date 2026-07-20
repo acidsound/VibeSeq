@@ -416,7 +416,7 @@ export function importMidiToProject(data: ArrayBuffer | Uint8Array, options: Mid
   const imported = importMidi(data, options);
   const timestamp = new Date(options.now ?? Date.now()).toISOString();
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: `midi-project-${timestamp.replace(/[^0-9]/g, '').slice(0, 14)}`,
     name: options.projectName ?? 'Imported MIDI',
     bpm: imported.bpm,

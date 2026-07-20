@@ -540,3 +540,26 @@ describe('EngineDialog model installation guidance', () => {
     await waitFor(() => expect(openModelCache).toHaveBeenCalledOnce())
   })
 })
+
+describe('EngineDialog recording compensation', () => {
+  it('shows the browser estimate and applies a bounded manual trim', () => {
+    const onRecordingLatencyTrim = vi.fn()
+    render(createElement(EngineDialog, {
+      health: null,
+      generationProvider: 'procedural-demo',
+      transcriptionProvider: 'signal-demo',
+      onGenerationProvider: vi.fn(),
+      onTranscriptionProvider: vi.fn(),
+      recordingLatencyEstimateMs: 18.5,
+      recordingLatencyTrimMs: 2,
+      onRecordingLatencyTrim,
+      onClose: vi.fn(),
+    }))
+
+    expect(screen.getByText('20.5 ms')).not.toBeNull()
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Recording latency manual trim' }), {
+      target: { value: '600' },
+    })
+    expect(onRecordingLatencyTrim).toHaveBeenCalledWith(500)
+  })
+})

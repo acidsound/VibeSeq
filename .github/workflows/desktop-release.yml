@@ -184,9 +184,16 @@ jobs:
       - name: Write release scope
         run: |
           cat > "${RUNNER_TEMP}/release-notes.md" <<'EOF'
-          ## VibeSeq 0.1.1
+          ## VibeSeq __RELEASE_TAG__
 
           This unsigned release provides the VibeSeq desktop runtime, local persistence, arrangement editing, playback, and export.
+
+          ### Highlights
+
+          - Shift each Audio clip by up to one octave without changing its placement duration, and stretch time independently from 0.125x to 2x using Signalsmith Stretch.
+          - Record live input into an armed Audio track while listening to the Arrangement, with automatic browser input/output latency compensation and a manual trim control.
+          - Keep multi-pass loop recordings as one unfolded linear take for full editing, with `REC N×`, pitch, and stretch badges directly on the clip.
+          - Preserve raw recorded WAV media and apply latency correction as a non-destructive source offset. Waveform cache repair prevents uneven recording lengths from blocking durable saves.
 
           It embeds the Studio, Stable Audio 3 execution source, a frozen portable CPU runtime, and verified first-run installers, so Node.js, Python, and `uv` do not need to be preinstalled. Model weights and the optional Windows CUDA runtime are not included in the executable.
 
@@ -206,12 +213,16 @@ jobs:
 
           Windows runtime installation clears and refreshes only the pinned FlashAttention wheel cache before synchronization, then automatically retries with an isolated temporary cache if interrupted installation metadata is incomplete. App shutdown terminates the complete sidecar, CUDA Python, and runtime-installer process trees; the persistent CUDA service also watches its parent process so it cannot remain orphaned and block a later Setup update.
 
-          Existing Windows alpha users do not need to uninstall first. Close VibeSeq and run the 0.1.1 Setup over the same installation directory. The installer replaces the application in place and preserves the existing `VibeSeq Data` directory beside the executable.
+          Existing Windows users do not need to uninstall first. Close VibeSeq and run the __RELEASE_VERSION__ Setup over the same installation directory. The installer replaces the application in place and preserves the existing `VibeSeq Data` directory beside the executable.
 
           Powered by Stability AI.
 
           Windows is distributed as a current-user assisted NSIS installer so extraction progress is visible and `VibeSeq Data` remains beside the installed executable. The installed app then shows Local data, Audio engine, Health check, and Studio startup stages while its local service starts. Windows SmartScreen and macOS Gatekeeper may warn because code-signing identities are not configured yet. On Linux, run `chmod +x VibeSeq-*.AppImage` before launching. Verify the downloaded asset with `SHA256SUMS.txt` before running it.
           EOF
+          sed -i \
+            -e "s/__RELEASE_TAG__/${GITHUB_REF_NAME}/g" \
+            -e "s/__RELEASE_VERSION__/${GITHUB_REF_NAME#v}/g" \
+            "${RUNNER_TEMP}/release-notes.md"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

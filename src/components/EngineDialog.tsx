@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, Download, ExternalLink, FolderOpen, MonitorCog, Save, Square, X } from 'lucide-react'
+import { AudioLines, CircleAlert, CircleCheck, Download, ExternalLink, FolderOpen, MonitorCog, Save, Square, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { EngineCapability, InferenceHealth } from '../api/inference'
 import { useModalFocus } from '../hooks/useModalFocus'
@@ -10,6 +10,9 @@ type EngineDialogProps = {
   transcriptionProvider: string
   onGenerationProvider: (value: string) => void
   onTranscriptionProvider: (value: string) => void
+  recordingLatencyEstimateMs?: number
+  recordingLatencyTrimMs?: number
+  onRecordingLatencyTrim?: (value: number) => void
   onModelInstalled?: () => void | Promise<void>
   onClose: () => void
 }
@@ -335,6 +338,9 @@ export function EngineDialog({
   transcriptionProvider,
   onGenerationProvider,
   onTranscriptionProvider,
+  recordingLatencyEstimateMs = 0,
+  recordingLatencyTrimMs = 0,
+  onRecordingLatencyTrim,
   onModelInstalled,
   onClose,
 }: EngineDialogProps) {
@@ -360,6 +366,7 @@ export function EngineDialog({
   const computeDetail = cudaCapability
     ? `${health?.hardware.cudaName || 'NVIDIA CUDA GPU'} · ${cudaRuntimeLabel}`
     : `Target ${health?.target ?? 'unknown'} · route order ${devices}`
+  const effectiveRecordingLatencyMs = Math.max(0, Math.min(1_000, recordingLatencyEstimateMs + recordingLatencyTrimMs))
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -374,7 +381,7 @@ export function EngineDialog({
         onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onClose() } }}
       >
         <header>
-          <div><p className="eyebrow">COMPUTE</p><h2 id="engine-dialog-title">Inference readiness</h2></div>
+          <div><p className="eyebrow">AUDIO &amp; COMPUTE</p><h2 id="engine-dialog-title">Engine settings</h2></div>
           <button autoFocus className="icon-button" onClick={onClose} aria-label="Close engine settings"><X /></button>
         </header>
 
@@ -386,6 +393,32 @@ export function EngineDialog({
           </div>
           <span>{serviceHealthy ? 'HEALTH RESPONDED' : 'NO HEALTH RESPONSE'}</span>
         </div>
+
+        <section className="recording-settings-card" aria-labelledby="recording-settings-title">
+          <AudioLines aria-hidden="true" />
+          <div>
+            <b id="recording-settings-title">Audio input compensation</b>
+            <small>Browser output + input estimate, applied as a non-destructive source offset</small>
+          </div>
+          <strong>{effectiveRecordingLatencyMs.toFixed(1)} ms</strong>
+          <label>
+            <span>MANUAL TRIM</span>
+            <input
+              type="number"
+              min="-500"
+              max="500"
+              step="0.1"
+              value={recordingLatencyTrimMs}
+              disabled={!onRecordingLatencyTrim}
+              onChange={(event) => onRecordingLatencyTrim?.(
+                Math.max(-500, Math.min(500, Number(event.target.value) || 0)),
+              )}
+              aria-label="Recording latency manual trim"
+            />
+            <small>ms</small>
+          </label>
+          <p>Estimate {recordingLatencyEstimateMs.toFixed(1)} ms · updated when microphone access starts. Use a negative trim when the take lands too early, positive when it remains late.</p>
+        </section>
 
         <div className="engine-capabilities">
           <EngineCapabilityCard

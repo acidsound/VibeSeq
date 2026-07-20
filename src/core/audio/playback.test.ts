@@ -6,7 +6,7 @@ import { buildPlaybackPlan, WebAudioPlaybackEngine } from './playback';
 import { rescaleFixedSecondsAudioClipGeometry } from './timebase';
 
 const createParityProject = (): Project => ({
-  schemaVersion: 4,
+  schemaVersion: 5,
   id: 'project-parity',
   name: 'Parity fixture',
   bpm: 60,

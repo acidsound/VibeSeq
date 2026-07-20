@@ -94,6 +94,7 @@ const renderInspector = (overrides: Partial<InspectorProps> = {}) => {
     onDeleteTrack: vi.fn(),
     onRenameRegion: vi.fn(),
     onFade: vi.fn(),
+    onAudioTransform: vi.fn(),
     onToggleClipMute: vi.fn(),
     onToggleSourceLoop: vi.fn(),
     onExtract: vi.fn(),
@@ -163,6 +164,33 @@ describe('Inspector linked audio region provenance', () => {
     expect(screen.queryByText('Linked region')).toBeNull()
     expect(screen.queryByRole('img', { name: 'Linked audio region unavailable' })).toBeNull()
     expect(screen.queryByRole('button', { name: /linked audio region/i })).toBeNull()
+  })
+})
+
+describe('Inspector audio transform controls', () => {
+  it('stages clip-local pitch and stretch before applying them together', () => {
+    const onAudioTransform = vi.fn()
+    renderInspector({
+      clip: audioClip(),
+      track: audioTrack(audioClip()),
+      onAudioTransform,
+    })
+
+    fireEvent.change(screen.getByRole('slider', { name: /^Pitch/ }), { target: { value: '7' } })
+    fireEvent.change(screen.getByRole('slider', { name: /^Stretch/ }), { target: { value: '1.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to clip' }))
+    expect(onAudioTransform).toHaveBeenCalledWith(7, 1.5)
+  })
+
+  it('offers reset for a transformed clip', () => {
+    const clip = audioClip()
+    clip.assetId = 'derived-asset'
+    clip.transform = { sourceAssetId: 'audio-asset', pitchSemitones: -5, stretchRatio: 2 }
+    const onAudioTransform = vi.fn()
+    renderInspector({ clip, track: audioTrack(clip), onAudioTransform })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(onAudioTransform).toHaveBeenCalledWith(0, 1)
   })
 })
 

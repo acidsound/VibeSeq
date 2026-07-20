@@ -85,6 +85,50 @@ describe('AudioWorklet project protocol', () => {
 });
 
 describe('AudioWorklet render kernel', () => {
+  it('uses the transformed derivative coordinate for stretched source loops', () => {
+    const sampleRate = 1_000;
+    const project = createBlankProject({ now: '2026-07-19T00:00:00.000Z', bpm: 60 });
+    project.masterGain = 1;
+    project.tracks = [{
+      id: 'stretched-track',
+      name: 'Stretched audio',
+      kind: 'audio',
+      color: '#f6a84b',
+      gain: 1,
+      pan: 0,
+      mute: false,
+      solo: false,
+      clips: [{
+        id: 'stretched-clip',
+        name: 'Stretched loop',
+        kind: 'audio',
+        assetId: 'stretched-asset',
+        startBeat: 0,
+        durationBeats: 4,
+        offsetBeats: 0,
+        timebase: { mode: 'fixed-seconds', sourceBpm: 60 },
+        sourceLoop: { cycleStartBeat: 0, cycleLengthBeats: 1, phaseBeats: 0 },
+        transform: { sourceAssetId: 'immutable-asset', pitchSemitones: 5, stretchRatio: 2 },
+        gain: 1,
+        fadeIn: 0,
+        fadeOut: 0,
+        provenance: { source: 'user', createdAt: project.createdAt },
+      }],
+    }];
+    const source = Float32Array.from(
+      { length: sampleRate * 2 + 1 },
+      (_, frame) => Math.sin((2 * Math.PI * 5 * frame) / sampleRate),
+    );
+    const renderer = new VibeSeqWorkletRenderer(sampleRate);
+    renderer.handleCommand({ type: 'sync-asset', asset: { id: 'stretched-asset', sampleRate, channelData: [source] } });
+    renderer.handleCommand({ type: 'sync-project', project: createWorkletProjectSnapshot(project) });
+    renderer.handleCommand({ type: 'play', fromBeat: 0, toBeat: 4, loop: false });
+
+    const [left] = renderFrames(renderer, 2_200);
+    expect(left[2_050]).toBeCloseTo(left[50], 5);
+    expect(Math.abs(left[50])).toBeGreaterThan(0.001);
+  });
+
   it('renders a newly placed audio asset without restarting active playback', () => {
     const sampleRate = 44_100;
     const project = createBlankProject({ now: '2026-07-17T00:00:00.000Z', bpm: 60, sampleRate });

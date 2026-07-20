@@ -15,7 +15,7 @@ export interface BlankProjectOptions extends DemoProjectOptions {
 export function createBlankProject(options: BlankProjectOptions = {}): Project {
   const timestamp = new Date(options.now ?? Date.now()).toISOString();
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: options.id ?? 'project-local-default',
     name: options.name ?? 'Untitled Sequence',
     bpm: options.bpm ?? 120,
@@ -80,7 +80,7 @@ export function createDemoProject(options: DemoProjectOptions = {}): Project {
   const bassNotes = [36, 36, 43, 43, 41, 41, 38, 38];
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: options.id ?? 'demo-neon-afterglow',
     name: options.name ?? 'Neon Afterglow',
     bpm: 118,

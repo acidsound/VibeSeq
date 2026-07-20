@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ChevronDown,
+  Circle,
   Download,
   Grid3X3,
   Menu,
@@ -29,7 +30,11 @@ type TransportProps = {
   health: InferenceHealth | null
   generationProvider: string
   masterLevel: number
+  recordingState: 'idle' | 'starting' | 'recording' | 'stopping'
+  recordingTargetName?: string
+  recordingCompensationMs: number
   onTogglePlay: () => void
+  onToggleRecord: () => void
   onStop: () => void
   onSeekStart: () => void
   onToggleLoop: () => void
@@ -53,7 +58,11 @@ export function Transport({
   health,
   generationProvider,
   masterLevel,
+  recordingState,
+  recordingTargetName,
+  recordingCompensationMs,
   onTogglePlay,
+  onToggleRecord,
   onStop,
   onSeekStart,
   onToggleLoop,
@@ -70,6 +79,15 @@ export function Transport({
   const [tempoDraft, setTempoDraft] = useState(() => project.bpm.toFixed(1))
   const [tempoEditing, setTempoEditing] = useState(false)
   const skipTempoBlurRef = useRef(false)
+  const recordingBusy = recordingState === 'starting' || recordingState === 'stopping'
+  const recordingActive = recordingState === 'recording' || recordingState === 'stopping'
+  const recordingLabel = recordingBusy
+    ? recordingState === 'starting' ? 'Starting audio recording' : 'Finishing audio recording'
+    : recordingActive
+      ? `Stop recording ${recordingTargetName ?? 'audio input'}`
+      : recordingTargetName
+        ? `Record audio to ${recordingTargetName}`
+        : 'Record audio · arm an Audio track first'
 
   useEffect(() => {
     if (!tempoEditing) setTempoDraft(project.bpm.toFixed(1))
@@ -109,6 +127,14 @@ export function Transport({
           {playing ? <Pause /> : <Play fill="currentColor" />}
         </button>
         <button className="icon-button" onClick={onStop} aria-label="Stop"><Square fill="currentColor" /></button>
+        <button
+          className={`icon-button record-button ${recordingActive ? 'is-recording' : ''}`}
+          onClick={onToggleRecord}
+          disabled={recordingBusy}
+          aria-label={recordingLabel}
+          aria-pressed={recordingActive}
+          title={`${recordingLabel} · ${recordingCompensationMs.toFixed(1)} ms compensation`}
+        ><Circle fill="currentColor" /></button>
         <button className={`icon-button ${project.loop.enabled ? 'is-active' : ''}`} onClick={onToggleLoop} aria-label="Toggle loop" aria-pressed={project.loop.enabled}><Repeat2 /></button>
       </div>
 
@@ -131,6 +157,7 @@ export function Transport({
           inputMode="decimal"
           enterKeyHint="done"
           value={tempoDraft}
+          disabled={recordingState !== 'idle'}
           aria-valuetext={`${tempoDraft || project.bpm.toFixed(1)} BPM, press Enter or leave the field to apply`}
           title="Press Enter or leave the field to apply"
           onFocus={() => setTempoEditing(true)}

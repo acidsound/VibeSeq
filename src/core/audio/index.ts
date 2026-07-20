@@ -9,6 +9,8 @@ export * from './segment';
 export * from './tempo';
 export * from './tempoWorker';
 export * from './timebase';
+export * from './transform';
+export * from './inputRecording';
 export * from './workletProtocol';
 export * from './workletRenderer';
 export * from './audioWorkletEngine';

@@ -9,6 +9,7 @@ import { Transport } from './Transport'
 const renderTransport = (onBpmChange = vi.fn()) => {
   const project = createBlankProject({ now: '2026-07-15T00:00:00.000Z' })
   const onSnapGridChange = vi.fn()
+  const onToggleRecord = vi.fn()
   render(createElement(Transport, {
     project,
     playheadBeat: 0,
@@ -19,7 +20,11 @@ const renderTransport = (onBpmChange = vi.fn()) => {
     health: null,
     generationProvider: 'procedural-demo',
     masterLevel: 0,
+    recordingState: 'idle',
+    recordingTargetName: 'Audio 1',
+    recordingCompensationMs: 18.5,
     onTogglePlay: vi.fn(),
+    onToggleRecord,
     onStop: vi.fn(),
     onSeekStart: vi.fn(),
     onToggleLoop: vi.fn(),
@@ -31,7 +36,7 @@ const renderTransport = (onBpmChange = vi.fn()) => {
     onOpenProject: vi.fn(),
     onOpenSettings: vi.fn(),
   }))
-  return { input: screen.getByRole('spinbutton', { name: 'Tempo' }), onBpmChange, onSnapGridChange }
+  return { input: screen.getByRole('spinbutton', { name: 'Tempo' }), onBpmChange, onSnapGridChange, onToggleRecord }
 }
 
 afterEach(() => {
@@ -96,5 +101,15 @@ describe('Transport snap grid', () => {
 
     fireEvent.change(select, { target: { value: '1/8' } })
     expect(onSnapGridChange).toHaveBeenCalledWith('1/8')
+  })
+})
+
+describe('Transport audio recording', () => {
+  it('shows the armed target and active latency compensation on the record control', () => {
+    const { onToggleRecord } = renderTransport()
+    const record = screen.getByRole('button', { name: 'Record audio to Audio 1' })
+    expect(record.getAttribute('title')).toContain('18.5 ms compensation')
+    fireEvent.click(record)
+    expect(onToggleRecord).toHaveBeenCalledOnce()
   })
 })

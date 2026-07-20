@@ -42,12 +42,27 @@ class FakeNode {
   disconnect(): void { this.disconnected = true; }
 }
 
+class FakeMediaSource {
+  connected = false;
+  disconnected = false;
+
+  connect<T>(destination: T): T {
+    this.connected = true;
+    return destination;
+  }
+
+  disconnect(): void { this.disconnected = true; }
+}
+
 class FakeContext {
   state: AudioContextState = 'suspended';
   currentTime = 10;
+  baseLatency = 0.004;
+  outputLatency = 0.006;
   readonly destination = {};
   readonly moduleUrls: string[] = [];
   readonly listeners = new Set<() => void>();
+  readonly mediaSources: FakeMediaSource[] = [];
   resumeError?: Error;
   readonly audioWorklet: { addModule: (url: string) => Promise<void> };
 
@@ -71,6 +86,12 @@ class FakeContext {
   decodeAudioDataImpl: (bytes: ArrayBuffer) => Promise<AudioBuffer> = async () => { throw new Error('not used'); };
 
   async decodeAudioData(bytes: ArrayBuffer): Promise<AudioBuffer> { return this.decodeAudioDataImpl(bytes); }
+
+  createMediaStreamSource(): MediaStreamAudioSourceNode {
+    const source = new FakeMediaSource();
+    this.mediaSources.push(source);
+    return source as unknown as MediaStreamAudioSourceNode;
+  }
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
     if (type === 'statechange') this.listeners.add(listener as () => void);
@@ -234,6 +255,68 @@ describe('AudioWorklet host engine', () => {
     expect(positions.at(-1)).toBe(0.75);
     expect(meters.at(-1)).toBe(0.42);
     expect(states).toContain('playing');
+    await engine.dispose();
+  });
+
+  it('captures transferable input chunks and reports a latency estimate without folding looped transport', async () => {
+    const context = new FakeContext();
+    const harness = nodeHarness();
+    const engine = new AudioWorkletPlaybackEngine(midiProject(), {
+      context: context as unknown as AudioContext,
+      nodeFactory: harness.factory,
+      processorModuleUrl: '/audio-worklet.js',
+    });
+    const stream = {
+      getAudioTracks: () => [{ readyState: 'live' }],
+    } as unknown as MediaStream;
+
+    const started = engine.startInputRecording(stream, 1);
+    await vi.waitFor(() => expect(harness.nodes[0]?.port.messages.at(-1)).toMatchObject({
+      type: 'start-recording',
+      channelCount: 1,
+    }));
+    const node = harness.nodes[0];
+    const startCommand = node.port.messages.at(-1);
+    if (startCommand?.type !== 'start-recording') throw new Error('Expected recording start command');
+    node.port.emit({
+      type: 'recording-started',
+      sessionId: startCommand.sessionId,
+      startPositionBeat: 3.75,
+      startFrame: 10_000,
+      sampleRate: 48_000,
+      channelCount: 1,
+    });
+    expect(await started).toMatchObject({ startPositionBeat: 3.75, startFrame: 10_000 });
+    expect(engine.isInputRecording()).toBe(true);
+    expect(engine.getRecordingLatencyEstimate(0.01)).toEqual({
+      baseLatencySeconds: 0.004,
+      outputLatencySeconds: 0.006,
+      inputLatencySeconds: 0.01,
+      totalSeconds: 0.02,
+    });
+
+    node.port.emit({
+      type: 'recording-chunk',
+      sessionId: startCommand.sessionId,
+      frameCount: 3,
+      channelData: [Float32Array.of(0.1, 0.2, 0.3)],
+    });
+    const completed = engine.stopInputRecording();
+    expect(node.port.messages.at(-1)).toEqual({ type: 'stop-recording', sessionId: startCommand.sessionId });
+    node.port.emit({
+      type: 'recording-complete',
+      sessionId: startCommand.sessionId,
+      endFrame: 10_003,
+      frameCount: 3,
+    });
+    const result = await completed;
+    expect(result.channelData[0]).toHaveLength(3);
+    expect(result.channelData[0][0]).toBeCloseTo(0.1, 6);
+    expect(result.channelData[0][1]).toBeCloseTo(0.2, 6);
+    expect(result.channelData[0][2]).toBeCloseTo(0.3, 6);
+    expect(result.startPositionBeat).toBe(3.75);
+    expect(engine.isInputRecording()).toBe(false);
+    expect(context.mediaSources[0].disconnected).toBe(true);
     await engine.dispose();
   });
 

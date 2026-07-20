@@ -209,7 +209,7 @@ export async function createCapacityReferenceFixture(): Promise<CapacityReferenc
   const pcm48 = makePcm(48_000, true);
   const assets = await Promise.all([makeAudioAsset(pcm44), makeAudioAsset(pcm48)]);
   const project: Project = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'capacity-reference-project',
     name: 'Capacity reference 10 minute',
     bpm: CAPACITY_REFERENCE_TARGET.bpm,

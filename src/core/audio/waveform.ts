@@ -35,8 +35,11 @@ export function extractWaveformPeaks(
   const end = Math.max(start, Math.min(sourceLength, Math.ceil(normalizedOptions.endSample ?? sourceLength)));
   const available = end - start;
   const requestedBuckets = Math.max(1, Math.floor(normalizedOptions.buckets ?? 1_024));
-  const bucketCount = available === 0 ? requestedBuckets : Math.min(requestedBuckets, available);
-  const samplesPerPeak = available === 0 ? 1 : available / bucketCount;
+  // Persisted waveform metadata requires an exact source-frame stride. Keep
+  // that stride integral and let the final bucket contain fewer samples when
+  // the source length does not divide evenly (common for live recordings).
+  const samplesPerPeak = available === 0 ? 1 : Math.max(1, Math.ceil(available / requestedBuckets));
+  const bucketCount = available === 0 ? requestedBuckets : Math.ceil(available / samplesPerPeak);
   const min = new Array<number>(bucketCount).fill(0);
   const max = new Array<number>(bucketCount).fill(0);
   const rms = new Array<number>(bucketCount).fill(0);

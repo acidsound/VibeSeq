@@ -118,11 +118,12 @@ const upperBoundStart = <T extends { startBeat: number }>(values: readonly T[], 
 };
 
 const sourceBeatAtPosition = (clip: WorkletAudioClip, positionBeat: number): number => {
-  if (!clip.sourceLoop) return clip.offsetBeats + positionBeat;
-  return clip.sourceLoop.cycleStartBeat + positiveModulo(
-    clip.sourceLoop.phaseBeats + positionBeat,
+  const sourcePositionBeat = positionBeat / clip.stretchRatio;
+  if (!clip.sourceLoop) return (clip.offsetBeats + sourcePositionBeat) * clip.stretchRatio;
+  return (clip.sourceLoop.cycleStartBeat + positiveModulo(
+    clip.sourceLoop.phaseBeats + sourcePositionBeat,
     clip.sourceLoop.cycleLengthBeats,
-  );
+  )) * clip.stretchRatio;
 };
 
 const monoPan = (sample: number, pan: number): [number, number] => {

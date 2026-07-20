@@ -150,6 +150,7 @@ export const captureMidiExtractionSnapshot = (
   offsetBeats: clip.offsetBeats,
   sourceLoop: clip.sourceLoop ? { ...clip.sourceLoop } : undefined,
   timebase: { ...clip.timebase },
+  transform: clip.transform ? { ...clip.transform } : undefined,
   bpm,
 })
 

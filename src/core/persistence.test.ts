@@ -58,7 +58,7 @@ describe('local project persistence', () => {
     expect([...new Uint8Array(restored.assets[0].bytes!)]).toEqual([4, 8, 15, 16, 23, 42]);
     expect(await restored.assets[0].blob?.text()).toBe('audio');
     expect(restored.sampleRate).toBe(48_000);
-    expect(restored.schemaVersion).toBe(4);
+    expect(restored.schemaVersion).toBe(5);
     expect(restored.tracks[0].clips[0]).toMatchObject({
       timebase: { mode: 'fixed-seconds', sourceBpm: 118 },
     });
@@ -71,6 +71,15 @@ describe('local project persistence', () => {
     });
   });
 
+  it('repairs fractional waveform strides from an unsaved live recording at the durability boundary', async () => {
+    const project = createDemoProject({ now: '2026-07-15T00:00:00.000Z' });
+    project.assets[0].waveform![0].samplesPerPeak = 124.5;
+
+    const restored = deserializeProject(await serializeProject(project));
+
+    expect(restored.assets[0].waveform?.[0].samplesPerPeak).toBe(125);
+  });
+
   it('migrates schema v1 projects without a sample rate to 44.1 kHz', () => {
     const current = createDemoProject({ now: '2026-07-15T00:00:00.000Z', sampleRate: 48_000 });
     const legacy = JSON.parse(JSON.stringify(current)) as Record<string, unknown>;
@@ -79,19 +88,19 @@ describe('local project persistence', () => {
     delete legacy.arrangement;
 
     const restored = deserializeProject(JSON.stringify(legacy));
-    expect(restored.schemaVersion).toBe(4);
+    expect(restored.schemaVersion).toBe(5);
     expect(restored.sampleRate).toBe(44_100);
     expect(restored.arrangement.overlapPolicy).toBe('prevent');
     expect(() => validateProject({ ...legacy, sampleRate: 96_000 })).toThrow(/44100 or 48000/);
   });
 
-  it('migrates schema v2 clips without source loops and round-trips schema v4 loop phase', async () => {
+  it('migrates schema v2 clips without source loops and round-trips schema v5 loop phase', async () => {
     const current = createDemoProject({ now: '2026-07-15T00:00:00.000Z' });
     const v2 = JSON.parse(JSON.stringify(current)) as Record<string, unknown>;
     v2.schemaVersion = 2;
     delete v2.arrangement;
     const migrated = validateProject(v2);
-    expect(migrated.schemaVersion).toBe(4);
+    expect(migrated.schemaVersion).toBe(5);
     expect(migrated.arrangement.overlapPolicy).toBe('prevent');
     expect(migrated.tracks[0].clips[0].sourceLoop).toBeUndefined();
 
@@ -102,7 +111,7 @@ describe('local project persistence', () => {
     };
     current.tracks[0].clips[0].durationBeats = 13.25;
     const restored = deserializeProject(await serializeProject(current));
-    expect(restored.schemaVersion).toBe(4);
+    expect(restored.schemaVersion).toBe(5);
     expect(restored.arrangement.overlapPolicy).toBe('prevent');
     expect(restored.tracks[0].clips[0]).toMatchObject({
       durationBeats: 13.25,
@@ -134,7 +143,7 @@ describe('local project persistence', () => {
     delete fixedMedia.timebase;
 
     const migrated = validateProject(legacy);
-    expect(migrated.schemaVersion).toBe(4);
+    expect(migrated.schemaVersion).toBe(5);
     expect(migrated.tracks[0].clips[0]).toMatchObject({
       timebase: { mode: 'tempo-follow-repitch', sourceBpm: 120 },
     });
@@ -143,12 +152,39 @@ describe('local project persistence', () => {
     });
   });
 
-  it('requires valid schema v4 Audio timing and rejects an unreconciled fixed-seconds BPM', () => {
+  it('migrates schema v4 without a transform and round-trips schema v5 clip transforms', async () => {
+    const current = createDemoProject({ now: '2026-07-15T00:00:00.000Z' });
+    const audio = current.tracks[0].clips[0];
+    if (audio.kind !== 'audio') throw new Error('Expected Audio fixture');
+
+    const legacy = JSON.parse(JSON.stringify(current)) as { schemaVersion: number };
+    legacy.schemaVersion = 4;
+    const migrated = validateProject(legacy);
+    expect(migrated.schemaVersion).toBe(5);
+    expect(migrated.tracks[0].clips[0]).toHaveProperty('transform', undefined);
+
+    audio.transform = {
+      sourceAssetId: 'asset-dream-drift-source',
+      pitchSemitones: -12,
+      stretchRatio: 0.125,
+    };
+    const restored = deserializeProject(await serializeProject(current));
+    expect(restored.tracks[0].clips[0]).toMatchObject({
+      transform: {
+        sourceAssetId: 'asset-dream-drift-source',
+        pitchSemitones: -12,
+        stretchRatio: 0.125,
+      },
+    });
+  });
+
+  it('requires valid schema v4+ Audio timing and rejects an unreconciled fixed-seconds BPM', () => {
     type MutableAudioClip = { timebase?: { mode: string; sourceBpm: number } };
     type MutableProject = { tracks: Array<{ clips: MutableAudioClip[] }> };
     const raw = JSON.parse(JSON.stringify(
       createDemoProject({ now: '2026-07-15T00:00:00.000Z' }),
-    )) as MutableProject;
+    )) as MutableProject & { schemaVersion?: number };
+    raw.schemaVersion = 4;
     const audioClip = raw.tracks[0].clips[0];
 
     delete audioClip.timebase;

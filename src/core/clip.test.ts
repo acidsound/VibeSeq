@@ -58,6 +58,33 @@ describe('clip source loops', () => {
     ]);
   });
 
+  it('maps stretched placement beats into the rendered derivative and keeps trim/split phase exact', () => {
+    const clip = audioLoop();
+    clip.durationBeats = 11;
+    clip.transform = {
+      sourceAssetId: 'asset-loop-source',
+      pitchSemitones: 7,
+      stretchRatio: 2,
+    };
+
+    expect(sourceBeatAtClipPosition(clip, 0)).toBe(17);
+    expect(sourceBeatAtClipPosition(clip, 3)).toBe(16);
+    expect(getClipSourceSlices(clip).slice(0, 2)).toEqual([
+      { placementStartBeat: 0, durationBeats: 3, sourceStartBeat: 17 },
+      { placementStartBeat: 3, durationBeats: 4, sourceStartBeat: 16 },
+    ]);
+
+    const trimmed = trimClipStart(clip, 7.5);
+    expect(trimmed.offsetBeats).toBe(2.75);
+    expect(trimmed.sourceLoop?.phaseBeats).toBe(0.25);
+    expect(sourceBeatAtClipPosition(trimmed, 0)).toBe(sourceBeatAtClipPosition(clip, 3.5));
+
+    const split = splitClipAtBeat(clip, 8.5, { createId: () => 'stretched-right' });
+    expect(split.right.offsetBeats).toBe(3.25);
+    expect(split.right.sourceLoop?.phaseBeats).toBe(0.75);
+    expect(sourceBeatAtClipPosition(split.right, 0)).toBe(sourceBeatAtClipPosition(clip, 4.5));
+  });
+
   it('resizes only the placement and keeps the immutable source cycle', () => {
     const clip = audioLoop();
     const resized = resizeClipPlacement(clip, 9.25);

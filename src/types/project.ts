@@ -81,6 +81,17 @@ export interface AudioTimebase {
   sourceBpm: number;
 }
 
+/**
+ * A non-destructive transform backed by a rendered derivative of the immutable
+ * source asset. Source coordinates stay in the original asset's beat space;
+ * `stretchRatio` is output duration / source duration.
+ */
+export interface AudioTransform {
+  sourceAssetId: EntityId;
+  pitchSemitones: number;
+  stretchRatio: number;
+}
+
 export interface ClipBase {
   id: EntityId;
   name: string;
@@ -104,6 +115,7 @@ export interface AudioClip extends ClipBase {
   kind: 'audio';
   assetId: EntityId;
   timebase: AudioTimebase;
+  transform?: AudioTransform;
   notes?: never;
 }
 
@@ -232,6 +244,7 @@ export interface MidiExtractionJobSnapshot {
   offsetBeats: number;
   sourceLoop?: ClipSourceLoop;
   timebase: AudioTimebase;
+  transform?: AudioTransform;
   bpm: number;
 }
 
@@ -267,7 +280,7 @@ export interface AIJob {
 }
 
 export interface Project {
-  schemaVersion: 4;
+  schemaVersion: 5;
   id: EntityId;
   name: string;
   bpm: number;

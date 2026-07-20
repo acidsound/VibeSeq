@@ -10,6 +10,9 @@ import { AddTrackButtons } from './AddTrackButtons'
 
 type ClipEdit = { startBeat?: number; durationBeats?: number; offsetBeats?: number; sourceLoop?: ClipSourceLoop }
 
+const sourceStretchRatioForClip = (clip: Clip): number =>
+  clip.kind === 'audio' ? clip.transform?.stretchRatio ?? 1 : 1
+
 const sourceDurationBeatsForClip = (
   clip: Clip,
   asset: AudioAsset,
@@ -17,6 +20,15 @@ const sourceDurationBeatsForClip = (
 ): number => clip.kind === 'audio'
   ? getAudioSourceDurationBeats(clip, asset)
   : secondsToBeats(asset.durationSeconds, projectBpm)
+
+const compactTransformNumber = (value: number): string => Number(value.toFixed(3)).toString()
+
+export const pitchTransformBadge = (pitchSemitones: number): string =>
+  `${pitchSemitones > 0 ? '+' : ''}${compactTransformNumber(pitchSemitones)}`
+
+export const stretchTransformBadge = (stretchRatio: number): string => stretchRatio >= 1
+  ? `×${compactTransformNumber(stretchRatio)}`
+  : `/${compactTransformNumber(1 / stretchRatio)}`
 
 type ArrangementProps = {
   project: Project
@@ -37,7 +49,7 @@ type ArrangementProps = {
   onMoveClip: (sourceTrackId: string, targetTrackId: string, clipId: string, startBeat: number) => void
   onOpenClipDetail: (clipId: string, trackId: string) => void
   onOpenClipCommands: (clipId: string, trackId: string, anchor: { x: number; y: number }) => void
-  onToggleTrack: (trackId: string, field: 'mute' | 'solo') => void
+  onToggleTrack: (trackId: string, field: 'mute' | 'solo' | 'armed') => void
   onTrackGain: (trackId: string, gain: number) => void
   onMoveTrack: (trackId: string, direction: 'up' | 'down') => void
   onAddTrack: (kind: TrackKind) => void
@@ -65,6 +77,7 @@ type DragState = {
   durationBeats: number
   offsetBeats: number
   sourceLoop?: ClipSourceLoop
+  sourceStretchRatio: number
   sourceCycleMax: number
   previewStart: number
   previewDuration: number
@@ -435,14 +448,18 @@ export function Arrangement({
           }
         } else if (current.mode === 'cycle-end') {
           const minimum = (current.sourceLoop?.phaseBeats ?? 0) + 0.25
+          const sourceDeltaBeat = deltaBeat / current.sourceStretchRatio
+          const snappedCycleLength = quantize(
+            ((current.sourceLoop?.cycleLengthBeats ?? minimum) + sourceDeltaBeat) * current.sourceStretchRatio,
+          ) / current.sourceStretchRatio
           next = {
             ...current,
-            previewCycleLength: Math.min(current.sourceCycleMax, Math.max(minimum, quantize((current.sourceLoop?.cycleLengthBeats ?? minimum) + deltaBeat))),
+            previewCycleLength: Math.min(current.sourceCycleMax, Math.max(minimum, snappedCycleLength)),
             hasMoved: true,
           }
         } else {
           const maxDelta = current.durationBeats - 0.25
-          const adjusted = Math.max(-current.offsetBeats, Math.min(maxDelta, deltaBeat))
+          const adjusted = Math.max(-current.offsetBeats * current.sourceStretchRatio, Math.min(maxDelta, deltaBeat))
           const nextStart = quantize(current.startBeat + adjusted)
           const actualDelta = nextStart - current.startBeat
           const previewDuration = Math.max(0.25, current.durationBeats - actualDelta)
@@ -451,7 +468,7 @@ export function Arrangement({
             ...current,
             previewStart: Math.max(0, nextStart),
             previewDuration,
-            previewOffset: Math.max(0, current.offsetBeats + actualDelta),
+            previewOffset: Math.max(0, current.offsetBeats + actualDelta / current.sourceStretchRatio),
             dropStatus: sourceTrack && findClipCollision(sourceTrack, current.clipId, Math.max(0, nextStart), previewDuration) ? 'collision' : 'source',
             hasMoved: true,
           }
@@ -512,7 +529,7 @@ export function Arrangement({
             sourceLoop: {
               ...current.sourceLoop,
               phaseBeats: positiveModulo(
-                current.sourceLoop.phaseBeats + current.previewStart - current.startBeat,
+                current.sourceLoop.phaseBeats + (current.previewStart - current.startBeat) / current.sourceStretchRatio,
                 current.sourceLoop.cycleLengthBeats,
               ),
             },
@@ -615,8 +632,9 @@ export function Arrangement({
     onSelectClip(clip.id, track.id)
     const width = timelineRef.current?.getBoundingClientRect().width ?? 1
     const asset = findAsset(project, clip.assetId)
+    const sourceStretchRatio = sourceStretchRatioForClip(clip)
     const sourceCycleMax = clip.sourceLoop && asset
-      ? Math.max(clip.sourceLoop.cycleLengthBeats, sourceDurationBeatsForClip(clip, asset, project.bpm) - clip.sourceLoop.cycleStartBeat)
+      ? Math.max(clip.sourceLoop.cycleLengthBeats, sourceDurationBeatsForClip(clip, asset, project.bpm) / sourceStretchRatio - clip.sourceLoop.cycleStartBeat)
       : clip.sourceLoop?.cycleLengthBeats ?? clip.durationBeats
     const nextDrag: DragState = {
       interactionId: ++gestureSequenceRef.current,
@@ -634,6 +652,7 @@ export function Arrangement({
       durationBeats: clip.durationBeats,
       offsetBeats: clip.offsetBeats,
       sourceLoop: clip.sourceLoop ? { ...clip.sourceLoop } : undefined,
+      sourceStretchRatio,
       sourceCycleMax,
       previewStart: clip.startBeat,
       previewDuration: clip.durationBeats,
@@ -972,7 +991,7 @@ type TrackRowProps = {
   onMoveClip: (sourceTrackId: string, targetTrackId: string, clipId: string, startBeat: number) => void
   onOpenClipDetail: (clipId: string, trackId: string) => void
   onOpenClipCommands: (clipId: string, trackId: string, anchor: { x: number; y: number }) => void
-  onToggleTrack: (trackId: string, field: 'mute' | 'solo') => void
+  onToggleTrack: (trackId: string, field: 'mute' | 'solo' | 'armed') => void
   onTrackGain: (trackId: string, gain: number) => void
   onMoveTrack: (trackId: string, direction: 'up' | 'down') => void
   onDropAudioSource: (payload: AudioSourceDragPayload, trackId: string, startBeat: number) => void
@@ -1065,13 +1084,14 @@ function TrackRow({
     event.stopPropagation()
     const direction = event.key === 'ArrowRight' ? 1 : -1
     const step = snapping ? snapDivision : 0.05
+    const sourceStretchRatio = sourceStretchRatioForClip(clip)
     if (edge === 'end') {
       if (clip.sourceLoop) {
         const asset = findAsset(project, clip.assetId)
         const maximum = asset
-          ? Math.max(clip.sourceLoop.cycleLengthBeats, sourceDurationBeatsForClip(clip, asset, project.bpm) - clip.sourceLoop.cycleStartBeat)
+          ? Math.max(clip.sourceLoop.cycleLengthBeats, sourceDurationBeatsForClip(clip, asset, project.bpm) / sourceStretchRatio - clip.sourceLoop.cycleStartBeat)
           : clip.sourceLoop.cycleLengthBeats
-        const cycleLengthBeats = Math.min(maximum, Math.max(clip.sourceLoop.phaseBeats + 0.25, clip.sourceLoop.cycleLengthBeats + direction * step))
+        const cycleLengthBeats = Math.min(maximum, Math.max(clip.sourceLoop.phaseBeats + 0.25, clip.sourceLoop.cycleLengthBeats + direction * step / sourceStretchRatio))
         onEditClip(track.id, clip.id, { sourceLoop: { ...clip.sourceLoop, cycleLengthBeats, phaseBeats: positiveModulo(clip.sourceLoop.phaseBeats, cycleLengthBeats) } })
         return
       }
@@ -1079,16 +1099,16 @@ function TrackRow({
       return
     }
     const requestedDelta = direction * step
-    const lowerBound = -Math.min(clip.startBeat, clip.offsetBeats)
+    const lowerBound = -Math.min(clip.startBeat, clip.offsetBeats * sourceStretchRatio)
     const actualDelta = Math.max(lowerBound, Math.min(clip.durationBeats - 0.25, requestedDelta))
     onEditClip(track.id, clip.id, {
       startBeat: clip.startBeat + actualDelta,
       durationBeats: clip.durationBeats - actualDelta,
-      offsetBeats: clip.offsetBeats + actualDelta,
+      offsetBeats: clip.offsetBeats + actualDelta / sourceStretchRatio,
       ...(clip.sourceLoop ? {
         sourceLoop: {
           ...clip.sourceLoop,
-          phaseBeats: positiveModulo(clip.sourceLoop.phaseBeats + actualDelta, clip.sourceLoop.cycleLengthBeats),
+          phaseBeats: positiveModulo(clip.sourceLoop.phaseBeats + actualDelta / sourceStretchRatio, clip.sourceLoop.cycleLengthBeats),
         },
       } : {}),
     })
@@ -1105,9 +1125,10 @@ function TrackRow({
           <button type="button" aria-label={`Move ${track.name} track up`} onClick={() => onMoveTrack(track.id, 'up')} disabled={index === 0}><ArrowUp /></button>
           <button type="button" aria-label={`Move ${track.name} track down`} onClick={() => onMoveTrack(track.id, 'down')} disabled={index === trackCount - 1}><ArrowDown /></button>
         </div>
-        <div className="track-controls">
+        <div className={`track-controls ${track.kind === 'audio' ? 'can-record' : ''}`}>
           <button aria-label={`Mute ${track.name}`} aria-pressed={track.mute} className={track.mute ? 'is-active' : ''} onClick={() => onToggleTrack(track.id, 'mute')}>M</button>
           <button aria-label={`Solo ${track.name}`} aria-pressed={track.solo} className={track.solo ? 'is-active' : ''} onClick={() => onToggleTrack(track.id, 'solo')}>S</button>
+          {track.kind === 'audio' && <button aria-label={`Record arm ${track.name}`} aria-pressed={Boolean(track.armed)} className={track.armed ? 'is-record-armed' : ''} onClick={() => onToggleTrack(track.id, 'armed')}>R</button>}
           <div className="mini-meter" role="meter" aria-label={`${track.name} peak level`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(level * 100)}><i style={{ width: `${Math.round(level * 100)}%` }} /></div>
           <input aria-label={`${track.name} gain`} aria-valuetext={`${(20 * Math.log10(Math.max(0.001, track.gain))).toFixed(1)} decibels`} type="range" min="0" max="1.25" step="0.01" value={track.gain} onChange={(event) => onTrackGain(track.id, Number(event.target.value))} />
         </div>
@@ -1165,8 +1186,25 @@ function TrackRow({
             : ''
           const sourceDurationBeats = asset ? sourceDurationBeatsForClip(visualClip, asset, project.bpm) : 0
           const cycleBoundary = sourceLoop
-            ? Math.min(duration, Math.max(0.25, sourceLoop.cycleLengthBeats - sourceLoop.phaseBeats))
+            ? Math.min(
+                duration,
+                Math.max(0.25, (sourceLoop.cycleLengthBeats - sourceLoop.phaseBeats) * (clip.kind === 'audio' ? clip.transform?.stretchRatio ?? 1 : 1)),
+              )
             : duration
+          const transform = clip.kind === 'audio' ? clip.transform : undefined
+          const pitchBadge = transform && Math.abs(transform.pitchSemitones) > 1e-9
+            ? pitchTransformBadge(transform.pitchSemitones)
+            : undefined
+          const stretchBadge = transform && Math.abs(transform.stretchRatio - 1) > 1e-9
+            ? stretchTransformBadge(transform.stretchRatio)
+            : undefined
+          const recordedLoopPasses = clip.provenance.source === 'recording'
+            && typeof clip.provenance.metadata?.unfoldedLoopPasses === 'number'
+            ? clip.provenance.metadata.unfoldedLoopPasses
+            : undefined
+          const recordingBadge = clip.provenance.source === 'recording'
+            ? recordedLoopPasses && recordedLoopPasses > 1 ? `REC ${recordedLoopPasses}×` : 'REC'
+            : undefined
           return (
             <div
               key={clip.id}
@@ -1216,9 +1254,9 @@ function TrackRow({
                 }}
                 aria-describedby="arrangement-clip-keyboard-help"
                 aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Enter Shift+F10"
-                aria-label={`${selected ? 'Selected, ' : ''}${clip.name}, ${clip.kind} region, starts at beat ${start.toFixed(2)}, duration ${duration.toFixed(2)} beats${clip.muted ? ', muted' : ''}${sourceLoop ? ', clip source loop enabled' : ''}`}
+                aria-label={`${selected ? 'Selected, ' : ''}${clip.name}, ${clip.kind} region, starts at beat ${start.toFixed(2)}, duration ${duration.toFixed(2)} beats${recordingBadge ? `, ${recordingBadge} latency compensated` : ''}${pitchBadge ? `, pitch ${pitchBadge} semitones` : ''}${stretchBadge ? `, stretch ${stretchBadge}` : ''}${clip.muted ? ', muted' : ''}${sourceLoop ? ', clip source loop enabled' : ''}`}
               />
-              <header className="clip-title" aria-hidden="true"><span>{clip.name}</span>{clip.muted && <VolumeX className="clip-muted-icon" />}{sourceLoop && <b><Repeat2 />{sourceSlices.length}×</b>}{clip.provenance.parentAssetId && <Link2 />}</header>
+              <header className="clip-title" aria-hidden="true"><span>{clip.name}</span>{(recordingBadge || pitchBadge || stretchBadge) && <em className="clip-transform-badges">{recordingBadge && <small>{recordingBadge}</small>}{pitchBadge && <small>{pitchBadge}</small>}{stretchBadge && <small>{stretchBadge}</small>}</em>}{clip.muted && <VolumeX className="clip-muted-icon" />}{sourceLoop && <b><Repeat2 />{sourceSlices.length}×</b>}{clip.provenance.parentAssetId && <Link2 />}</header>
               {clip.kind === 'audio' ? (
                 asset?.waveform?.[0] && sourceDurationBeats > 0 ? (
                   <div className="clip-waveform-slices" aria-hidden="true">

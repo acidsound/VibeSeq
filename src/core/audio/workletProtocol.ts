@@ -21,6 +21,7 @@ export interface WorkletAudioClip {
   offsetBeats: number;
   sourceLoop?: WorkletSourceLoop;
   timebase: AudioClip['timebase'];
+  stretchRatio: number;
   gain: number;
   fadeIn: number;
   fadeOut: number;
@@ -100,6 +101,20 @@ export interface WorkletMidiAudition {
   profile: MidiPlaybackProfile;
 }
 
+export interface WorkletRecordingStart {
+  sessionId: string;
+  startPositionBeat: number;
+  startFrame: number;
+  sampleRate: number;
+  channelCount: number;
+}
+
+export interface WorkletRecordingResult extends WorkletRecordingStart {
+  endFrame: number;
+  frameCount: number;
+  channelData: Float32Array[];
+}
+
 export type WorkletPlaybackState = 'idle' | 'playing' | 'paused';
 
 export type WorkletCommand =
@@ -117,6 +132,9 @@ export type WorkletCommand =
   | { type: 'stop-audition'; token?: number }
   | { type: 'audition-midi-note'; audition: WorkletMidiAudition }
   | { type: 'stop-midi-note-audition'; token?: number }
+  | { type: 'start-recording'; sessionId: string; channelCount: number }
+  | { type: 'stop-recording'; sessionId: string }
+  | { type: 'cancel-recording'; sessionId: string }
   | { type: 'dispose' };
 
 export type WorkletEvent =
@@ -131,6 +149,10 @@ export type WorkletEvent =
   | { type: 'ended'; positionBeat: number }
   | { type: 'audition-ended'; token: number }
   | { type: 'midi-audition-ended'; token: number }
+  | ({ type: 'recording-started' } & WorkletRecordingStart)
+  | { type: 'recording-chunk'; sessionId: string; frameCount: number; channelData: Float32Array[] }
+  | { type: 'recording-complete'; sessionId: string; endFrame: number; frameCount: number }
+  | { type: 'recording-cancelled'; sessionId: string }
   | { type: 'error'; code: string; message: string; assetId?: string };
 
 const audioClipSnapshot = (clip: AudioClip, projectBpm: number): WorkletAudioClip => {
@@ -145,6 +167,7 @@ const audioClipSnapshot = (clip: AudioClip, projectBpm: number): WorkletAudioCli
     offsetBeats: clip.offsetBeats,
     sourceLoop: clip.sourceLoop ? { ...clip.sourceLoop } : undefined,
     timebase: { ...clip.timebase },
+    stretchRatio: clip.transform?.stretchRatio ?? 1,
     gain: clip.gain,
     fadeIn: clip.fadeIn,
     fadeOut: clip.fadeOut,

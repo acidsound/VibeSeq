@@ -1,6 +1,7 @@
 import type {
   AIJob,
   AudioAsset,
+  AudioTransform,
   AudioTimebase,
   Clip,
   ClipProvenance,
@@ -28,7 +29,7 @@ import { assertProjectArrangementInvariants } from './projectInvariants';
 
 export const PROJECT_SERIALIZATION_FORMAT = 'vibeseq-project';
 export const PROJECT_SERIALIZATION_VERSION = 1;
-export const PROJECT_SCHEMA_VERSION = 4;
+export const PROJECT_SCHEMA_VERSION = 5;
 
 export type ProjectImportErrorCode =
   | 'invalid-json'
@@ -310,6 +311,24 @@ const sourceLoopValue = (value: unknown, path: string): ClipSourceLoop | undefin
   return { cycleStartBeat, cycleLengthBeats, phaseBeats };
 };
 
+const audioTransformValue = (value: unknown, path: string): AudioTransform | undefined => {
+  if (value === undefined) return undefined;
+  const source = record(value, path);
+  const pitchSemitones = numberValue(source.pitchSemitones, `${path}.pitchSemitones`);
+  const stretchRatio = numberValue(source.stretchRatio, `${path}.stretchRatio`);
+  if (pitchSemitones < -12 || pitchSemitones > 12) {
+    fail(`${path}.pitchSemitones`, 'expected pitch shift in range -12..12 semitones');
+  }
+  if (stretchRatio < 0.125 || stretchRatio > 2) {
+    fail(`${path}.stretchRatio`, 'expected stretch ratio in range 0.125..2');
+  }
+  return {
+    sourceAssetId: stringValue(source.sourceAssetId, `${path}.sourceAssetId`),
+    pitchSemitones,
+    stretchRatio,
+  };
+};
+
 const audioTimebaseValue = (
   value: unknown,
   path: string,
@@ -318,7 +337,7 @@ const audioTimebaseValue = (
   provenance: ClipProvenance,
 ): AudioTimebase => {
   if (value === undefined) {
-    if (sourceSchemaVersion >= PROJECT_SCHEMA_VERSION) fail(path, 'expected an explicit Audio timebase');
+    if (sourceSchemaVersion >= 4) fail(path, 'expected an explicit Audio timebase');
     const metadata = provenance.metadata;
     const generatedInBars = metadata?.generationLengthUnit === 'bars';
     const generatedBpm = metadata?.generationLengthBpm;
@@ -379,6 +398,7 @@ const clipValue = (
         projectBpm,
         provenance,
       ),
+      transform: audioTransformValue(source.transform, `${path}.transform`),
     };
   }
   const notes = arrayValue(source.notes, `${path}.notes`).map((note, index) =>
@@ -478,8 +498,13 @@ const peakLevelValue = (value: unknown, path: string): WaveformPeakLevel => {
   const max = numbers(source.max, `${path}.max`);
   const rms = source.rms === undefined ? undefined : numbers(source.rms, `${path}.rms`);
   if (min.length !== max.length || (rms && rms.length !== max.length)) fail(path, 'waveform arrays must have equal lengths');
-  const samplesPerPeak = numberValue(source.samplesPerPeak, `${path}.samplesPerPeak`);
-  if (!Number.isInteger(samplesPerPeak) || samplesPerPeak <= 0) fail(`${path}.samplesPerPeak`, 'expected a positive integer');
+  const rawSamplesPerPeak = numberValue(source.samplesPerPeak, `${path}.samplesPerPeak`);
+  if (rawSamplesPerPeak <= 0) fail(`${path}.samplesPerPeak`, 'expected a positive integer');
+  // Waveforms are a derived cache. Affected live-recording builds calculated
+  // this stride as frameCount / bucketCount, which can be fractional. Repair
+  // that in-memory value at the durability boundary so the take can still be
+  // checkpointed instead of being discarded after a failed save.
+  const samplesPerPeak = Math.max(1, Math.ceil(rawSamplesPerPeak));
   return { samplesPerPeak, min, max, rms };
 };
 
@@ -604,6 +629,7 @@ const midiExtractionJobSnapshotValue = (
     offsetBeats,
     sourceLoop: sourceLoopValue(source.sourceLoop, `${path}.sourceLoop`),
     timebase,
+    transform: audioTransformValue(source.transform, `${path}.transform`),
     bpm,
   };
 };
@@ -693,7 +719,7 @@ const ensureUniqueIds = (values: Array<{ id: string }>, path: string): void => {
 export function validateProject(value: unknown): Project {
   const source = record(value, 'project');
   const sourceSchemaVersion = numberValue(source.schemaVersion, 'project.schemaVersion');
-  if (![1, 2, 3, PROJECT_SCHEMA_VERSION].includes(sourceSchemaVersion)) {
+  if (![1, 2, 3, 4, PROJECT_SCHEMA_VERSION].includes(sourceSchemaVersion)) {
     throw new ProjectImportError(
       'unsupported-version',
       `Unsupported VibeSeq project schema ${String(source.schemaVersion)}`,

@@ -4,6 +4,7 @@ import {
   allProjectAudioAssetIds,
   type AudioWorkletPlaybackEngine,
   analyzeTempoInWorker,
+  audioTransformIsIdentity,
   audioBufferToPcmAsset,
   beatToBarsBeatsTicks,
   beatsPerBar,
@@ -27,16 +28,20 @@ import {
   getArrangedMidiNotes,
   PROJECT_BUNDLE_EXTENSION,
   PROJECT_BUNDLE_MIME_TYPE,
+  planUnfoldedLoopRecording,
+  recordedClipGeometry,
+  renderAudioTransform,
   secondsToBeats,
   serializeProjectBundle,
   serializeProjectCheckpoint,
+  SIGNALSMITH_STRETCH_VERSION,
   sha256Media,
   snapBeat,
   splitClipAtBeat,
   verifyMediaIntegrity,
 } from './core'
 import { ProjectDurabilityError } from './core'
-import type { MidiCrossingNotePolicy, NoteDivision, PersistenceBackend, ProjectCheckpoint, ProjectSessionSnapshot, SoundLibraryItem, TempoAnalysisResult, WavExportProgress } from './core'
+import type { MidiCrossingNotePolicy, NoteDivision, PersistenceBackend, ProjectCheckpoint, ProjectSessionSnapshot, SoundLibraryItem, TempoAnalysisResult, WavExportProgress, WorkletRecordingStart } from './core'
 import type { AudioAsset, AudioClip, Clip, MediaIntegrity, MidiNote, MidiTrack, MidiTrackSettings, PcmAudioAsset, Project, ProjectSampleRate, ProjectSummary, TimeSignature, Track, TrackKind, WaveformPeakLevel } from './types'
 import {
   cancelJob,
@@ -79,6 +84,33 @@ import { prepareWavExport, safeExportFilenamePart } from './ui/wavExportTarget'
 import type { WavExportTarget } from './ui/wavExportTarget'
 
 const makeId = (prefix: string): string => `${prefix}-${crypto.randomUUID()}`
+const RECORDING_LATENCY_TRIM_KEY = 'vibeseq.recording-latency-trim-ms'
+
+const initialRecordingLatencyTrimMs = (): number => {
+  try {
+    const value = Number(window.localStorage.getItem(RECORDING_LATENCY_TRIM_KEY) ?? 0)
+    return Number.isFinite(value) ? Math.max(-500, Math.min(500, value)) : 0
+  } catch {
+    return 0
+  }
+}
+
+type RecordingUiState = 'idle' | 'starting' | 'recording' | 'stopping'
+
+type LiveInputRecording = {
+  stream: MediaStream
+  start: WorkletRecordingStart
+  projectId: string
+  targetTrackId: string
+  targetTrackName: string
+  bpmAtStart: number
+  appliedCompensationMs: number
+  estimatedCompensationMs: number
+  inputLatencyMs: number
+  inputSampleRate?: number
+  inputChannelCount: number
+  loopAtStart: Project['loop']
+}
 
 const generationSource = (provider: string): 'stable-audio' | 'demo' =>
   provider === 'stable-audio-3' ? 'stable-audio' : 'demo'
@@ -211,6 +243,10 @@ function App() {
     setPlayheadBeat(beat)
   }, [])
   const [playing, setPlaying] = useState(false)
+  const [recordingState, setRecordingState] = useState<RecordingUiState>('idle')
+  const [recordingLatencyEstimateMs, setRecordingLatencyEstimateMs] = useState(0)
+  const [recordingLatencyTrimMs, setRecordingLatencyTrimMs] = useState(initialRecordingLatencyTrimMs)
+  const liveInputRecordingRef = useRef<LiveInputRecording | null>(null)
   const [meters, setMeters] = useState<{ master: number; tracks: Record<string, number> }>({ master: 0, tracks: {} })
   const [snapGrid, setSnapGrid] = useState<SnapGrid>('bar')
   const lastSnapGridRef = useRef<Exclude<SnapGrid, 'free'>>('bar')
@@ -230,6 +266,7 @@ function App() {
   const [tempoAnalysis, setTempoAnalysis] = useState<{ clipId: string; result: TempoAnalysisResult } | null>(null)
   const [tempoAnalysisError, setTempoAnalysisError] = useState<string | null>(null)
   const [tempoAnalyzing, setTempoAnalyzing] = useState(false)
+  const [transformingClipId, setTransformingClipId] = useState<string | null>(null)
   const activeJobRef = useRef<InferenceJob<unknown> | null>(null)
   const activeAbortRef = useRef<AbortController | null>(null)
   const [health, setHealth] = useState<InferenceHealth | null>(null)
@@ -278,10 +315,20 @@ function App() {
     () => libraryItems.find((item) => soundLibraryCandidateId(item.id) === previewCandidateId)?.id ?? null,
     [libraryItems, previewCandidateId],
   )
+  const armedAudioTrack = useMemo(
+    () => project.tracks.find((track) => track.kind === 'audio' && track.armed),
+    [project.tracks],
+  )
+  const recordingCompensationMs = Math.max(0, Math.min(1_000, recordingLatencyEstimateMs + recordingLatencyTrimMs))
 
   latestProjectRef.current = project
   latestSessionRef.current = { candidates, activeJob }
   recoveryCheckpointRef.current = recoveryCheckpoint
+
+  useEffect(() => {
+    try { window.localStorage.setItem(RECORDING_LATENCY_TRIM_KEY, String(recordingLatencyTrimMs)) }
+    catch { /* Restricted storage only makes this setting session-local. */ }
+  }, [recordingLatencyTrimMs])
 
   const cancelCandidatePreview = useCallback((updateUi = true) => {
     auditionPreviewGateRef.current.cancel()
@@ -613,6 +660,9 @@ function App() {
   useEffect(() => () => {
     activeAbortRef.current?.abort()
     mixExportAbortRef.current?.abort()
+    playbackRef.current?.cancelInputRecording()
+    liveInputRecordingRef.current?.stream.getTracks().forEach((track) => track.stop())
+    liveInputRecordingRef.current = null
     cancelCandidatePreview(false)
     playbackRef.current?.stopMidiNoteAudition()
   }, [cancelCandidatePreview])
@@ -683,6 +733,238 @@ function App() {
     }))
   }
 
+  const startInputRecording = async () => {
+    if (recordingState !== 'idle') return
+    const engine = playbackRef.current
+    if (!engine) return
+    const targetTrack = latestProjectRef.current.tracks.find((track) => track.kind === 'audio' && track.armed)
+    if (!targetTrack || targetTrack.kind !== 'audio') {
+      setToast('Recording needs an armed Audio track · press R on an Audio track first')
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setToast('Audio input recording is unavailable in this browser')
+      return
+    }
+
+    setRecordingState('starting')
+    let stream: MediaStream | undefined
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          latency: { ideal: 0 },
+          channelCount: { ideal: 2 },
+        } as MediaTrackConstraints & { latency: { ideal: number } },
+        video: false,
+      })
+      const targetProject = latestProjectRef.current
+      const liveTarget = targetProject.tracks.find((track) => track.id === targetTrack.id)
+      if (!liveTarget || liveTarget.kind !== 'audio' || !liveTarget.armed) {
+        throw new Error('The armed Audio track changed while input permission was being granted')
+      }
+      engine.setProject(targetProject)
+      await ensurePlaybackAssets(targetProject)
+      const inputTrack = stream.getAudioTracks()[0]
+      if (!inputTrack) throw new Error('The selected input did not provide an audio track')
+      const settings = inputTrack.getSettings()
+      const inputLatency = (settings as MediaTrackSettings & { latency?: number }).latency
+      const inputLatencySeconds = typeof inputLatency === 'number' ? inputLatency : 0
+      const estimate = engine.getRecordingLatencyEstimate(inputLatencySeconds)
+      const estimatedCompensationMs = Math.round(estimate.totalSeconds * 10_000) / 10
+      const appliedCompensationMs = Math.max(
+        0,
+        Math.min(1_000, estimatedCompensationMs + recordingLatencyTrimMs),
+      )
+      setRecordingLatencyEstimateMs(estimatedCompensationMs)
+      cancelCandidatePreview()
+
+      const wasPlaying = engine.getState() === 'playing'
+      const requestedStartBeat = targetProject.loop.enabled
+        ? targetProject.loop.startBeat
+        : playheadBeatRef.current
+      if (!wasPlaying) engine.seek(requestedStartBeat)
+      const start = await engine.startInputRecording(
+        stream,
+        Math.max(1, Math.min(2, settings.channelCount ?? 1)),
+      )
+      liveInputRecordingRef.current = {
+        stream,
+        start,
+        projectId: targetProject.id,
+        targetTrackId: liveTarget.id,
+        targetTrackName: liveTarget.name,
+        bpmAtStart: targetProject.bpm,
+        appliedCompensationMs,
+        estimatedCompensationMs,
+        inputLatencyMs: inputLatencySeconds * 1_000,
+        inputSampleRate: settings.sampleRate,
+        inputChannelCount: start.channelCount,
+        loopAtStart: { ...targetProject.loop },
+      }
+      if (!wasPlaying) {
+        await engine.play({ fromBeat: requestedStartBeat, loop: targetProject.loop.enabled })
+      }
+      setRecordingState('recording')
+      setToast(`Recording ${liveTarget.name} · ${appliedCompensationMs.toFixed(1)} ms compensation`)
+    } catch (error) {
+      engine.cancelInputRecording()
+      stream?.getTracks().forEach((track) => track.stop())
+      liveInputRecordingRef.current = null
+      setRecordingState('idle')
+      setToast(`Recording could not start: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  const stopInputRecording = async (stopTransportAfter = false) => {
+    const engine = playbackRef.current
+    const liveRecording = liveInputRecordingRef.current
+    if (!engine || !liveRecording || recordingState === 'stopping') return
+    setRecordingState('stopping')
+    let registeredAssetId: string | undefined
+    try {
+      // Preserve the tail which physically reaches the input after the user
+      // requests stop. The Worklet continues capturing during this short post-roll.
+      if (liveRecording.appliedCompensationMs > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, liveRecording.appliedCompensationMs))
+      }
+      const result = await engine.stopInputRecording()
+      if (result.frameCount <= 0) throw new Error('The input returned no PCM frames')
+      const geometry = recordedClipGeometry(
+        result.frameCount,
+        result.sampleRate,
+        liveRecording.bpmAtStart,
+        liveRecording.appliedCompensationMs,
+      )
+      const createdAt = new Date().toISOString()
+      const timestampLabel = new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      const assetId = makeId('asset-recording')
+      const clipId = makeId('clip-recording')
+      const wav = new Blob([
+        encodeWav(result.channelData, result.sampleRate, { bitDepth: 32, dither: 'none' }),
+      ], { type: 'audio/wav' })
+      const mediaIdentity = await establishMediaIdentity(wav)
+      const rawDurationSeconds = result.frameCount / result.sampleRate
+      const takeName = `Recorded Take ${timestampLabel}`
+      const unfoldedPlan = planUnfoldedLoopRecording(
+        result.startPositionBeat,
+        geometry.durationBeats,
+        liveRecording.loopAtStart,
+      )
+      const unfoldedLoopPasses = unfoldedPlan.passCount
+      const unfoldedLoop = unfoldedPlan.unfoldsProjectLoop
+      const clipEndBeat = result.startPositionBeat + geometry.durationBeats
+      const latestProject = latestProjectRef.current
+      if (latestProject.id !== liveRecording.projectId) {
+        throw new Error('The project changed during recording; the take was not attached to another project')
+      }
+      const requestedTrack = latestProject.tracks.find((track) => track.id === liveRecording.targetTrackId)
+      const requestedTrackAvailable = requestedTrack?.kind === 'audio'
+        && !findClipCollision(requestedTrack, clipId, result.startPositionBeat, geometry.durationBeats)
+      const targetTrackId = requestedTrackAvailable ? requestedTrack.id : makeId('track-recording')
+      const targetTrackName = requestedTrackAvailable
+        ? requestedTrack.name
+        : `${liveRecording.targetTrackName} · Take`
+      const targetTrackColor = requestedTrack?.color ?? '#F6A84B'
+      const asset: AudioAsset = {
+        id: assetId,
+        name: `${takeName}.wav`,
+        mimeType: 'audio/wav',
+        durationSeconds: rawDurationSeconds,
+        sampleRate: result.sampleRate,
+        channelCount: result.channelCount,
+        createdAt,
+        blob: wav,
+        waveform: [extractWaveformPeaks(result.channelData, 1_024)],
+        ...mediaIdentity,
+        provenance: {
+          source: 'recording',
+          createdAt,
+          model: 'Web Audio AudioWorklet PCM',
+          metadata: {
+            latencyCompensationMs: liveRecording.appliedCompensationMs,
+            estimatedLatencyMs: liveRecording.estimatedCompensationMs,
+            inputLatencyMs: liveRecording.inputLatencyMs,
+            inputSampleRate: liveRecording.inputSampleRate ?? null,
+            inputChannelCount: liveRecording.inputChannelCount,
+            rawStartFrame: result.startFrame,
+            rawEndFrame: result.endFrame,
+            unfoldedProjectLoop: unfoldedLoop,
+            unfoldedLoopPasses,
+          },
+        },
+      }
+      registeredAssetId = assetId
+      await engine.decodeAndRegister(assetId, wav)
+      if (asset.contentHashSha256) decodedAssetHashesRef.current.set(assetId, asset.contentHashSha256)
+
+      await mutate('Place latency-compensated recording', (draft) => {
+        draft.assets.push(asset)
+        let target = draft.tracks.find((track) => track.id === targetTrackId)
+        if (!target) {
+          target = {
+            id: targetTrackId,
+            name: targetTrackName,
+            kind: 'audio',
+            color: targetTrackColor,
+            gain: 0.9,
+            pan: 0,
+            mute: false,
+            solo: false,
+            clips: [],
+          }
+          const armedIndex = draft.tracks.findIndex((track) => track.id === liveRecording.targetTrackId)
+          draft.tracks.splice(armedIndex < 0 ? draft.tracks.length : armedIndex + 1, 0, target)
+        }
+        if (target.kind !== 'audio') throw new Error('Recording target is no longer an Audio track')
+        target.clips.push({
+          id: clipId,
+          name: takeName,
+          kind: 'audio',
+          startBeat: result.startPositionBeat,
+          durationBeats: geometry.durationBeats,
+          offsetBeats: geometry.offsetBeats,
+          assetId,
+          timebase: { mode: 'fixed-seconds', sourceBpm: liveRecording.bpmAtStart },
+          gain: 1,
+          fadeIn: 0.005,
+          fadeOut: 0.01,
+          provenance: {
+            source: 'recording',
+            createdAt,
+            parentAssetId: assetId,
+            metadata: {
+              latencyCompensationMs: liveRecording.appliedCompensationMs,
+              unfoldedProjectLoop: unfoldedLoop,
+              unfoldedLoopPasses,
+            },
+          },
+        })
+        if (unfoldedLoop && clipEndBeat > draft.loop.endBeat + 1e-9) draft.loop.enabled = false
+      })
+      setSelectedClipId(clipId)
+      setSelectedTrackId(targetTrackId)
+      setInspectorOpen(true)
+      setArrangementRevealRequest({ clipId, requestId: ++arrangementRevealSequenceRef.current })
+      setToast(unfoldedLoop
+        ? `Recorded ${unfoldedLoopPasses} loop passes · unfolded for linear editing · ${liveRecording.appliedCompensationMs.toFixed(1)} ms compensated`
+        : `Recording placed · ${liveRecording.appliedCompensationMs.toFixed(1)} ms compensated`)
+    } catch (error) {
+      if (registeredAssetId) {
+        engine.unregisterAudioBuffer(registeredAssetId)
+        decodedAssetHashesRef.current.delete(registeredAssetId)
+      }
+      setToast(`Recording failed: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      liveRecording.stream.getTracks().forEach((track) => track.stop())
+      liveInputRecordingRef.current = null
+      setRecordingState('idle')
+      if (stopTransportAfter) engine.stop(0)
+    }
+  }
+
   const togglePlayback = async () => {
     try {
       const engine = playbackRef.current
@@ -730,9 +1012,165 @@ function App() {
     }, mergeKey)
   }, [mutate, project.tracks])
 
-  const toggleTrack = useCallback((trackId: string, field: 'mute' | 'solo') => {
+  const applySelectedAudioTransform = async (pitchSemitones: number, stretchRatio: number) => {
+    if (transformingClipId) return
+    if (!selected || selected.clip.kind !== 'audio') return
+    const sourceClip = structuredClone(selected.clip)
+    const sourceTrackId = selected.track.id
+    const sourceAssetId = sourceClip.transform?.sourceAssetId ?? sourceClip.assetId
+    const previousDerivedAssetId = sourceClip.transform ? sourceClip.assetId : undefined
+    const previousStretchRatio = sourceClip.transform?.stretchRatio ?? 1
+    const nextDurationBeats = sourceClip.durationBeats * stretchRatio / previousStretchRatio
+    const collision = findClipCollision(selected.track, sourceClip.id, sourceClip.startBeat, nextDurationBeats)
+    if (collision) {
+      setToast(`Stretch blocked · ${collision.name} already occupies the extended range`)
+      return
+    }
+
+    const identity = audioTransformIsIdentity({ pitchSemitones, stretchRatio })
+    if (identity && !sourceClip.transform) return
+    setTransformingClipId(sourceClip.id)
+    let derivedAssetId: string | undefined
+    let context: AudioContext | undefined
+    try {
+      let derivedAsset: AudioAsset | undefined
+      let renderedBuffer: AudioBuffer | undefined
+      const sourceAsset = project.assets.find((asset) => asset.id === sourceAssetId)
+      if (!sourceAsset) throw new Error('The immutable source asset is missing')
+      const sourceIntegrity = await verifyMediaIntegrity(sourceAsset)
+      await recordAssetIntegrities([{ asset: sourceAsset, integrity: sourceIntegrity }])
+      assertMediaUsable(sourceAsset.name, sourceIntegrity)
+      const media = sourceAsset.blob
+        ?? (sourceAsset.bytes ? new Blob([sourceAsset.bytes], { type: sourceAsset.mimeType }) : undefined)
+      if (!media) throw new Error('The immutable source has no local encoded bytes')
+
+      context = new AudioContext()
+      const decodedSource = await context.decodeAudioData(await media.arrayBuffer())
+      if (!identity) {
+        renderedBuffer = await renderAudioTransform(decodedSource, { pitchSemitones, stretchRatio })
+        const wav = new Blob([
+          encodeWav(
+            Array.from({ length: renderedBuffer.numberOfChannels }, (_, channel) => renderedBuffer!.getChannelData(channel)),
+            renderedBuffer.sampleRate,
+            { bitDepth: 32, dither: 'none' },
+          ),
+        ], { type: 'audio/wav' })
+        const mediaIdentity = await establishMediaIdentity(wav)
+        derivedAssetId = makeId('asset-stretch')
+        const now = new Date().toISOString()
+        const pitchLabel = `${pitchSemitones > 0 ? '+' : ''}${pitchSemitones} st`
+        derivedAsset = {
+          id: derivedAssetId,
+          name: `${sourceAsset.name.replace(/\.[^.]+$/, '')} · ${pitchLabel} · ${stretchRatio.toFixed(3)}x.wav`,
+          mimeType: 'audio/wav',
+          durationSeconds: renderedBuffer.duration,
+          sampleRate: renderedBuffer.sampleRate,
+          channelCount: renderedBuffer.numberOfChannels,
+          createdAt: now,
+          blob: wav,
+          waveform: [extractWaveformPeaks(renderedBuffer, 1_024)],
+          ...mediaIdentity,
+          provenance: {
+            source: 'user',
+            createdAt: now,
+            model: `Signalsmith Stretch ${SIGNALSMITH_STRETCH_VERSION}`,
+            parentAssetId: sourceAssetId,
+            metadata: { pitchSemitones, stretchRatio },
+          },
+        }
+      }
+
+      const liveProject = latestProjectRef.current
+      const liveSelection = findClip(liveProject, sourceClip.id)
+      if (!liveSelection
+        || liveSelection.track.id !== sourceTrackId
+        || liveSelection.clip.kind !== 'audio'
+        || liveSelection.clip.assetId !== sourceClip.assetId
+        || (liveSelection.clip.transform?.pitchSemitones ?? 0) !== (sourceClip.transform?.pitchSemitones ?? 0)
+        || (liveSelection.clip.transform?.stretchRatio ?? 1) !== previousStretchRatio) {
+        throw new Error('The region changed while its audio was rendering; apply the transform again')
+      }
+      const liveCollision = findClipCollision(
+        liveSelection.track,
+        sourceClip.id,
+        liveSelection.clip.startBeat,
+        nextDurationBeats,
+      )
+      if (liveCollision) throw new Error(`${liveCollision.name} now occupies the extended range`)
+
+      if (derivedAsset && renderedBuffer && derivedAssetId) {
+        playbackRef.current?.registerAudioBuffer(derivedAssetId, renderedBuffer)
+        if (derivedAsset.contentHashSha256) {
+          decodedAssetHashesRef.current.set(derivedAssetId, derivedAsset.contentHashSha256)
+        }
+      } else if (identity) {
+        playbackRef.current?.registerAudioBuffer(sourceAssetId, decodedSource)
+        if (sourceIntegrity.actualHashSha256) {
+          decodedAssetHashesRef.current.set(sourceAssetId, sourceIntegrity.actualHashSha256)
+        }
+      }
+
+      await mutate(identity ? 'Reset audio pitch and stretch' : 'Apply audio pitch and stretch', (draft) => {
+        const draftClip = draft.tracks
+          .find((track) => track.id === sourceTrackId)
+          ?.clips.find((clip) => clip.id === sourceClip.id)
+        if (!draftClip || draftClip.kind !== 'audio') return
+        if (derivedAsset) draft.assets.push(derivedAsset)
+        draftClip.assetId = derivedAsset?.id ?? sourceAssetId
+        draftClip.durationBeats = nextDurationBeats
+        draftClip.transform = derivedAsset ? { sourceAssetId, pitchSemitones, stretchRatio } : undefined
+
+        if (previousDerivedAssetId && previousDerivedAssetId !== draftClip.assetId) {
+          const remainsReferenced = draft.tracks.some((track) => track.clips.some((clip) => (
+            clip.assetId === previousDerivedAssetId
+            || (clip.kind === 'audio' && clip.transform?.sourceAssetId === previousDerivedAssetId)
+          )))
+          if (!remainsReferenced) {
+            draft.assets = draft.assets.filter((asset) => asset.id !== previousDerivedAssetId)
+          }
+        }
+      })
+
+      const committed = getCurrentProject()
+      latestProjectRef.current = committed
+      playbackRef.current?.setProject(committed)
+      if (previousDerivedAssetId && !allProjectAudioAssetIds(committed).has(previousDerivedAssetId)) {
+        playbackRef.current?.unregisterAudioBuffer(previousDerivedAssetId)
+        decodedAssetHashesRef.current.delete(previousDerivedAssetId)
+      }
+      setTempoAnalysis((current) => current?.clipId === sourceClip.id ? null : current)
+      setToast(identity
+        ? 'Audio pitch and stretch reset to the immutable source'
+        : `Audio transformed · ${pitchSemitones > 0 ? '+' : ''}${pitchSemitones} st · ${stretchRatio.toFixed(3)}×`)
+    } catch (error) {
+      if (derivedAssetId && !allProjectAudioAssetIds(latestProjectRef.current).has(derivedAssetId)) {
+        playbackRef.current?.unregisterAudioBuffer(derivedAssetId)
+        decodedAssetHashesRef.current.delete(derivedAssetId)
+      }
+      setToast(`Audio transform failed: ${(error as Error).message}`)
+    } finally {
+      await context?.close().catch(() => undefined)
+      setTransformingClipId(null)
+    }
+  }
+
+  const toggleTrack = useCallback((trackId: string, field: 'mute' | 'solo' | 'armed') => {
     const currentTrack = project.tracks.find((item) => item.id === trackId)
     if (!currentTrack) return
+    if (field === 'armed') {
+      if (currentTrack.kind !== 'audio') return
+      if (recordingState !== 'idle') {
+        setToast('Track arm cannot change during recording')
+        return
+      }
+      const nextValue = !currentTrack.armed
+      void mutate(`${nextValue ? 'Arm' : 'Disarm'} Audio track`, (draft) => {
+        for (const track of draft.tracks) {
+          if (track.kind === 'audio') track.armed = track.id === trackId ? nextValue : false
+        }
+      })
+      return
+    }
     const nextValue = !currentTrack[field]
     playbackRef.current?.setTrackParameters(trackId, { [field]: nextValue })
     void mutate(`${field === 'mute' ? 'Mute' : 'Solo'} track`, (draft) => {
@@ -742,7 +1180,7 @@ function App() {
       const committed = getCurrentProject().tracks.find((track) => track.id === trackId)
       if (committed) playbackRef.current?.setTrackParameters(trackId, { [field]: committed[field] })
     })
-  }, [getCurrentProject, mutate, project.tracks])
+  }, [getCurrentProject, mutate, project.tracks, recordingState])
 
   const setTrackGain = useCallback((trackId: string, gain: number) => {
     playbackRef.current?.setTrackParameters(trackId, { gain })
@@ -1471,12 +1909,14 @@ function App() {
     const trackId = selected.track.id
     const clipId = selected.clip.id
     const enabling = !selected.clip.sourceLoop
-    const cycleLengthBeats = selected.clip.durationBeats
+    const sourceStretchRatio = selected.clip.kind === 'audio' ? selected.clip.transform?.stretchRatio ?? 1 : 1
+    const cycleLengthBeats = selected.clip.durationBeats / sourceStretchRatio
+    const placementCycleLengthBeats = selected.clip.durationBeats
     const nextOccupiedStart = selected.track.clips
       .filter((clip) => clip.id !== clipId && clip.startBeat >= selected.clip.startBeat + selected.clip.durationBeats - 1e-9)
       .reduce((minimum, clip) => Math.min(minimum, clip.startBeat), Number.POSITIVE_INFINITY)
-    const desiredDuration = cycleLengthBeats * 2
-    const enabledDuration = Math.max(cycleLengthBeats, Math.min(desiredDuration, nextOccupiedStart - selected.clip.startBeat))
+    const desiredDuration = placementCycleLengthBeats * 2
+    const enabledDuration = Math.max(placementCycleLengthBeats, Math.min(desiredDuration, nextOccupiedStart - selected.clip.startBeat))
     void mutate(`${enabling ? 'Enable' : 'Disable'} clip loop`, (draft) => {
       const clip = draft.tracks.find((track) => track.id === trackId)?.clips.find((item) => item.id === clipId)
       if (!clip) return
@@ -1495,7 +1935,7 @@ function App() {
       }
       clip.durationBeats = enabledDuration
     })
-    if (enabling && enabledDuration <= cycleLengthBeats + 1e-9) setToast('Clip loop enabled · drag its upper edge when a free range is available')
+    if (enabling && enabledDuration <= placementCycleLengthBeats + 1e-9) setToast('Clip loop enabled · drag its upper edge when a free range is available')
   }
 
   const editNote = (noteId: string, patch: Partial<MidiNote>) => {
@@ -2336,8 +2776,15 @@ function App() {
         health={health}
         generationProvider={generationProvider}
         masterLevel={meters.master}
+        recordingState={recordingState}
+        recordingTargetName={armedAudioTrack?.name}
+        recordingCompensationMs={recordingCompensationMs}
         onTogglePlay={() => void togglePlayback()}
-        onStop={() => playbackRef.current?.stop(0)}
+        onToggleRecord={() => void (recordingState === 'recording' ? stopInputRecording() : startInputRecording())}
+        onStop={() => {
+          if (recordingState === 'recording') void stopInputRecording(true)
+          else playbackRef.current?.stop(0)
+        }}
         onSeekStart={() => { playbackRef.current?.seek(0); updatePlayhead(0) }}
         onToggleLoop={() => void mutate('Toggle loop', (draft) => { draft.loop.enabled = !draft.loop.enabled })}
         onSnapGridChange={(grid) => {
@@ -2431,6 +2878,7 @@ function App() {
           tempoAnalyzing={tempoAnalyzing}
           tempoAnalysis={tempoAnalysis && tempoAnalysis.clipId === selected?.clip.id ? tempoAnalysis.result : null}
           tempoAnalysisError={tempoAnalysisError}
+          audioTransforming={transformingClipId === selected?.clip.id}
           linkedRegion={linkedRegion}
           onGain={(gain) => editSelectedProperty({ gain }, 'gain')}
           onTrackGain={(gain) => selectedTrack && setTrackGain(selectedTrack.id, gain)}
@@ -2441,6 +2889,7 @@ function App() {
           onDeleteTrack={() => selectedTrack && deleteTrack(selectedTrack.id)}
           onRenameRegion={(name) => selected && renameRegion(selected.clip.id, name)}
           onFade={(edge, value) => editSelectedProperty({ [edge]: value }, edge)}
+          onAudioTransform={(pitchSemitones, stretchRatio) => void applySelectedAudioTransform(pitchSemitones, stretchRatio)}
           onToggleClipMute={toggleSelectedClipMute}
           onToggleSourceLoop={toggleSelectedSourceLoop}
           onExtract={() => void extractMidi()}
@@ -2561,7 +3010,7 @@ function App() {
         onConfirm={() => void deleteLocalProject(projectDeleteTarget)}
       />}
       {exportOpen && <ExportDialog project={project} progress={mixExportProgress} onClose={closeExportDialog} onSampleRateChange={(sampleRate) => void mutate('Change project sample rate', (draft) => { draft.sampleRate = sampleRate }, 'project:sample-rate')} onExportMix={(scope, bitDepth, protectPeaks, sampleRate) => void exportMix(scope, bitDepth, protectPeaks, sampleRate)} onExportAllTracks={(bitDepth, protectPeaks, sampleRate) => void exportAllTracksZip(bitDepth, protectPeaks, sampleRate)} onCancelMix={cancelMixExport} onExportMidi={() => void exportMidi()} />}
-      {settingsOpen && <EngineDialog health={health} generationProvider={generationProvider} transcriptionProvider={transcriptionProvider} onGenerationProvider={setGenerationProvider} onTranscriptionProvider={setTranscriptionProvider} onModelInstalled={refreshInferenceHealth} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <EngineDialog health={health} generationProvider={generationProvider} transcriptionProvider={transcriptionProvider} onGenerationProvider={setGenerationProvider} onTranscriptionProvider={setTranscriptionProvider} recordingLatencyEstimateMs={recordingLatencyEstimateMs} recordingLatencyTrimMs={recordingLatencyTrimMs} onRecordingLatencyTrim={setRecordingLatencyTrimMs} onModelInstalled={refreshInferenceHealth} onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

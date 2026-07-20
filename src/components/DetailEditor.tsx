@@ -427,7 +427,7 @@ function AudioDetail({
   const fadeOutRatio = clipDurationSeconds > 0 ? displayedFadeOut / clipDurationSeconds : 0
   const sourceReadLabel = sourceSlices.length === 1
     ? `Source ${sourceSlices[0].sourceStartBeat.toFixed(2)}–${(sourceSlices[0].sourceStartBeat + sourceSlices[0].durationBeats).toFixed(2)} beats`
-    : `${sourceSlices.length} source reads${clip.sourceLoop ? ` · ${clip.sourceLoop.cycleLengthBeats.toFixed(2)}-beat loop` : ''}`
+    : `${sourceSlices.length} source reads${clip.sourceLoop ? ` · ${(clip.sourceLoop.cycleLengthBeats * (clip.transform?.stretchRatio ?? 1)).toFixed(2)}-beat loop` : ''}`
   const musicalGridLines = getAudioDetailGridLines(clip.startBeat, clip.durationBeats, timeSignature)
 
   const cancelFadeDrag = () => {

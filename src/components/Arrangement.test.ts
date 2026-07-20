@@ -7,7 +7,7 @@ import type { ArrangedMidiNote } from '../core'
 import { createDemoProject, snapBeat } from '../core'
 import { getArrangementTimelineBeats } from '../ui/music'
 import { AUDIO_SOURCE_DRAG_TYPE } from '../ui/sourceDrag'
-import { Arrangement, getRenderableWaveformSlice, midiThumbnailPath } from './Arrangement'
+import { Arrangement, getRenderableWaveformSlice, midiThumbnailPath, pitchTransformBadge, stretchTransformBadge } from './Arrangement'
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class {
@@ -143,6 +143,72 @@ const audioSourceDataTransfer = (payload: object) => ({
   effectAllowed: 'copy',
   dropEffect: 'none',
   getData: (type: string) => type === AUDIO_SOURCE_DRAG_TYPE ? JSON.stringify(payload) : '',
+})
+
+describe('Arrangement audio transform badges', () => {
+  it('formats pitch as a signed semitone count and sub-1x stretch as a divisor', () => {
+    expect(pitchTransformBadge(1)).toBe('+1')
+    expect(pitchTransformBadge(-2)).toBe('-2')
+    expect(stretchTransformBadge(2)).toBe('×2')
+    expect(stretchTransformBadge(0.25)).toBe('/4')
+    expect(stretchTransformBadge(0.125)).toBe('/8')
+  })
+
+  it('shows only the active transform values in the clip header', () => {
+    const project = createDemoProject({ now: '2026-07-15T00:00:00.000Z' })
+    const audio = project.tracks.flatMap((track) => track.clips).find((clip) => clip.kind === 'audio')
+    if (!audio || audio.kind !== 'audio') throw new Error('Expected Audio fixture')
+    audio.transform = { sourceAssetId: 'immutable-source', pitchSemitones: -2, stretchRatio: 0.25 }
+
+    const { container } = render(createElement(Arrangement, createArrangementProps({ project })))
+    expect(container.querySelector('.clip-transform-badges')?.textContent).toBe('-2/4')
+    expect(screen.getByLabelText(/pitch -2 semitones, stretch \/4/)).toBeTruthy()
+  })
+
+  it('maps keyboard trim and source-cycle edits back into the immutable source clock', () => {
+    const project = createDemoProject({ now: '2026-07-15T00:00:00.000Z' })
+    const audio = project.tracks.flatMap((track) => track.clips).find((clip) => clip.kind === 'audio')
+    if (!audio || audio.kind !== 'audio') throw new Error('Expected Audio fixture')
+    audio.transform = { sourceAssetId: 'immutable-source', pitchSemitones: 0, stretchRatio: 2 }
+    audio.sourceLoop = { cycleStartBeat: 0, cycleLengthBeats: 4, phaseBeats: 1 }
+    const asset = project.assets.find((candidate) => candidate.id === audio.assetId)
+    if (!asset) throw new Error('Expected Audio asset fixture')
+    asset.durationSeconds *= 2
+    const onEditClip = vi.fn()
+
+    render(createElement(Arrangement, createArrangementProps({ project, onEditClip })))
+    fireEvent.keyDown(screen.getByRole('button', {
+      name: `Change source cycle end of ${audio.name}. Use left and right arrow keys`,
+    }), { key: 'ArrowRight' })
+    expect(onEditClip).toHaveBeenLastCalledWith(expect.any(String), audio.id, {
+      sourceLoop: { cycleStartBeat: 0, cycleLengthBeats: 4.125, phaseBeats: 1 },
+    })
+
+    fireEvent.keyDown(screen.getByRole('button', {
+      name: `Trim start of ${audio.name}. Use left and right arrow keys`,
+    }), { key: 'ArrowRight' })
+    expect(onEditClip).toHaveBeenLastCalledWith(expect.any(String), audio.id, {
+      startBeat: 0.25,
+      durationBeats: 31.75,
+      offsetBeats: 0.125,
+      sourceLoop: { cycleStartBeat: 0, cycleLengthBeats: 4, phaseBeats: 1.125 },
+    })
+  })
+})
+
+describe('Arrangement audio record arm', () => {
+  it('exposes an exclusive-ready arm control only on Audio tracks', () => {
+    const project = createDemoProject({ now: '2026-07-15T00:00:00.000Z' })
+    const audioTrack = project.tracks.find((track) => track.kind === 'audio')!
+    const midiTrack = project.tracks.find((track) => track.kind === 'midi')!
+    const onToggleTrack = vi.fn()
+    render(createElement(Arrangement, createArrangementProps({ project, onToggleTrack })))
+
+    const arm = screen.getByRole('button', { name: `Record arm ${audioTrack.name}` })
+    fireEvent.click(arm)
+    expect(onToggleTrack).toHaveBeenCalledWith(audioTrack.id, 'armed')
+    expect(screen.queryByRole('button', { name: `Record arm ${midiTrack.name}` })).toBeNull()
+  })
 })
 
 describe('Arrangement source-card drop', () => {
